@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest"
 import { getShapeStream } from "./client"
-import { createServer } from "./server"
+import { createServer, updateRow } from "./server"
 
 beforeAll(async (context) => {
   context.server = await createServer()
@@ -27,10 +27,10 @@ describe(`HTTP Sync`, () => {
     }
 
     expect(shapeData).toEqual(
-      new Map([[1, { table: `issue`, id: 1, title: `foo2` }]])
+      new Map([[1, { table: `issue`, id: 1, title: `foo1` }]])
     )
   })
-  it(`should get initial data and then receive updates`, async () => {
+  it.only(`should get initial data and then receive updates`, async () => {
     const shapeData = new Map()
     const aborter = new AbortController()
     const dataStream = await getShapeStream(`issues`, {
@@ -38,8 +38,12 @@ describe(`HTTP Sync`, () => {
       signal: aborter.signal,
     })
     for await (const update of dataStream) {
+      console.log({ update })
       if (update.type === `data`) {
         shapeData.set(update.data.id, update.data)
+      }
+      if (update.lsn === 1 || update.lsn === 2) {
+        setTimeout(() => updateRow(1), 10)
       }
 
       if (update.lsn === 3) {
