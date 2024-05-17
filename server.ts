@@ -1,6 +1,7 @@
 import express from "express"
 import { Request, Response } from "express"
 import bodyParser from "body-parser"
+import cors from "cors"
 import { pipeline } from "node:stream/promises"
 import Stringer from "stream-json/jsonl/Stringer"
 
@@ -65,13 +66,13 @@ export function appendRow() {
   const newOp = {
     type: `data`,
     lsn: lastLsn + 1,
-    data: { table: `issue`, id: lastId, title: `foo${lastLsn}` },
+    data: { table: `issue`, id: lastId, title: `foo${lastLsn + 1}` },
   }
 
   console.log(`writing new op to connections`, { lsn: newOp.lsn })
   openConnections.forEach((resultStreamer) => {
     resultStreamer.write(newOp)
-    resultStreamer.write(`\n`)
+    resultStreamer.write({ type: `heartbeat` })
   })
 
   compactSnapshot()
@@ -100,7 +101,7 @@ export function updateRow(id) {
   console.log(`writing new op to connections`, { lsn: newOp.lsn })
   openConnections.forEach((resultStreamer) => {
     resultStreamer.write(newOp)
-    resultStreamer.write(`\n`)
+    resultStreamer.write({ type: `heartbeat` })
   })
 
   compactSnapshot()
@@ -108,6 +109,10 @@ export function updateRow(id) {
 
 export function createServer() {
   const app = express()
+
+  // Enable CORS for all routes
+  app.use(cors())
+
   app.use(bodyParser.json())
   // Middleware to check if request is from a browser
   const isBrowserRequest = (req, res, next) => {
