@@ -53,7 +53,7 @@ describe(`HTTP Sync`, () => {
         expect(shapeData).toEqual(
           new Map([
             [1, { table: `issue`, id: 1, title: `foo2` }],
-            [2, { table: `issue`, id: 2, title: `foo2` }],
+            [2, { table: `issue`, id: 2, title: `foo3` }],
           ])
         )
         break
@@ -89,7 +89,7 @@ describe(`HTTP Sync`, () => {
           expect(shapeData1).toEqual(
             new Map([
               [1, { table: `issue`, id: 1, title: `foo2` }],
-              [2, { table: `issue`, id: 2, title: `foo2` }],
+              [2, { table: `issue`, id: 2, title: `foo3` }],
             ])
           )
           break
@@ -109,7 +109,7 @@ describe(`HTTP Sync`, () => {
           expect(shapeData2).toEqual(
             new Map([
               [1, { table: `issue`, id: 1, title: `foo2` }],
-              [2, { table: `issue`, id: 2, title: `foo2` }],
+              [2, { table: `issue`, id: 2, title: `foo3` }],
             ])
           )
           break
