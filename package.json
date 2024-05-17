@@ -1,0 +1,27 @@
+{
+  "name": "http-sync-prototype",
+  "version": "1.0.0",
+  "main": "dist/client.js",
+  "scripts": {
+    "test": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KyleAMathews/http-sync-prototype.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/KyleAMathews/http-sync-prototype/issues"
+  },
+  "homepage": "https://github.com/KyleAMathews/http-sync-prototype#readme",
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "stream-json": "^1.8.0"
+  }
+}
