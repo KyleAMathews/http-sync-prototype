@@ -23,7 +23,9 @@ export async function getShapeStream(shapeId: string, options) {
           for await (const update of readable) {
             controller.enqueue(update)
             if (update.type === `data`) {
-              lastLSN = update.lsn
+              if (update.lsn > lastLSN) {
+                lastLSN = update.lsn
+              }
             }
           }
         })

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react"
 import "./App.css"
 import { getShapeStream } from "../../dist/client"
-console.log(getShapeStream)
 
 function useShape(shapeId) {
   const [shapeData, setShapeData] = useState([])

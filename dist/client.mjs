@@ -243,7 +243,9 @@ function getShapeStream(shapeId, options) {
                   const update = temp.value;
                   controller.enqueue(update);
                   if (update.type === `data`) {
-                    lastLSN = update.lsn;
+                    if (update.lsn > lastLSN) {
+                      lastLSN = update.lsn;
+                    }
                   }
                 }
               } catch (temp) {

@@ -124,10 +124,8 @@ export function createServer() {
         userAgent
       )
       if (isBrowser) {
-        console.log(`Request is coming from a browser:`, userAgent)
         req.isBrowser = true
       } else {
-        console.log(`Request is NOT coming from a browser:`, userAgent)
         req.isBrowser = false
       }
     } else {
@@ -161,7 +159,7 @@ export function createServer() {
     // Send initial cached response
     if (shapeId === `issues`) {
       if (!req.query.lsn) {
-        console.log(`snapshot`)
+        console.log(`snapshot`, snapshot.values())
         const { resultStreamer, streamPipeline } = streamData(res)
         for (const row of snapshot.values()) {
           resultStreamer.write(row)
