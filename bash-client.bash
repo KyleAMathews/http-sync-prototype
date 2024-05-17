@@ -7,7 +7,7 @@ BASE_URL="http://localhost:3000/shape/issues"
 OUTPUT_DIR="./json_files"
 
 # Initialize the latest lsn variable
-LATEST_LSN=""
+LATEST_LSN="-1"
 
 # Create the output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"
@@ -67,11 +67,7 @@ process_jsonl() {
 
 # Main loop to poll for updates every second
 while true; do
-    if [ -z "$LATEST_LSN" ]; then
-        url="$BASE_URL"
-    else
-        url="$BASE_URL?lsn=$LATEST_LSN"
-    fi
+    url="$BASE_URL?lsn=$LATEST_LSN"
 
     process_jsonl "$url" "file.jsonl"
 
