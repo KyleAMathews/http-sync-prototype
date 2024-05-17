@@ -19,7 +19,7 @@ There it can poll the same URL, always with the latest lsn, to get real-time upd
 ## Running the demos
 
 1. Install depndencies
-Run `npm install` in both the root and `web-demo` directories.
+Run `npm install` in both the root and `demo-web` directories.
 
 1. Start the server
 
@@ -31,7 +31,7 @@ Run `npm install` in both the root and `web-demo` directories.
 
 3. Run the web client
 
-`cd web-demo && npm run dev`
+`cd demo-web && npm run dev`
 
 4. Update data
 
