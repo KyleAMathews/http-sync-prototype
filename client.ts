@@ -1,6 +1,5 @@
 const baseUrl = `http://localhost:3000`
-import { JSONLinesParseStream } from "jsonlines-web"
-import { TextDecoderStream } from "node:stream/web"
+import { JSONLinesParseStream } from "./mod"
 
 export async function getShapeStream(shapeId: string, options) {
   const stream = new ReadableStream({

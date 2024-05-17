@@ -71,7 +71,7 @@ export function appendRow() {
   console.log(`writing new op to connections`, { lsn: newOp.lsn })
   openConnections.forEach((resultStreamer) => {
     resultStreamer.write(newOp)
-    resultStreamer.write({ type: `heartbeat` })
+    resultStreamer.write(`\n`)
   })
 
   compactSnapshot()
@@ -100,7 +100,7 @@ export function updateRow(id) {
   console.log(`writing new op to connections`, { lsn: newOp.lsn })
   openConnections.forEach((resultStreamer) => {
     resultStreamer.write(newOp)
-    resultStreamer.write({ type: `heartbeat` })
+    resultStreamer.write(`\n`)
   })
 
   compactSnapshot()
@@ -113,12 +113,16 @@ export function createServer() {
   const isBrowserRequest = (req, res, next) => {
     const userAgent = req.headers[`user-agent`]
     if (userAgent) {
-      const isBrowser = /Mozilla|Chrome|Safari|Opera|Edge|Trident/.test(
+      // more is it capable of long-polling and streaming changes...
+      // probably this should an explicit opt-in thing by the client to long-poll?
+      const isBrowser = /node|Mozilla|Chrome|Safari|Opera|Edge|Trident/.test(
         userAgent
       )
       if (isBrowser) {
+        console.log(`Request is coming from a browser:`, userAgent)
         req.isBrowser = true
       } else {
+        console.log(`Request is NOT coming from a browser:`, userAgent)
         req.isBrowser = false
       }
     } else {

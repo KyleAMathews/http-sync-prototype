@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest"
 import { getShapeStream } from "./client"
-import { createServer, updateRow, lastSnapshotLSN } from "./server"
+import { createServer, updateRow, appendRow, lastSnapshotLSN } from "./server"
 
 beforeAll(async (context) => {
   context.server = await createServer()
@@ -41,14 +41,20 @@ describe(`HTTP Sync`, () => {
       if (update.type === `data`) {
         shapeData.set(update.data.id, update.data)
       }
-      if (update.lsn === 1 || update.lsn === 2) {
+      if (update.lsn === 1) {
         setTimeout(() => updateRow(1), 10)
+      }
+      if (update.lsn === 2) {
+        setTimeout(() => appendRow(), 10)
       }
 
       if (update.lsn === 3) {
         aborter.abort()
         expect(shapeData).toEqual(
-          new Map([[1, { table: `issue`, id: 1, title: `foo3` }]])
+          new Map([
+            [1, { table: `issue`, id: 1, title: `foo2` }],
+            [2, { table: `issue`, id: 2, title: `foo2` }],
+          ])
         )
         break
       }
@@ -81,7 +87,10 @@ describe(`HTTP Sync`, () => {
         if (update.lsn === 3) {
           aborter1.abort()
           expect(shapeData1).toEqual(
-            new Map([[1, { table: `issue`, id: 1, title: `foo3` }]])
+            new Map([
+              [1, { table: `issue`, id: 1, title: `foo2` }],
+              [2, { table: `issue`, id: 2, title: `foo2` }],
+            ])
           )
           break
         }
@@ -98,7 +107,10 @@ describe(`HTTP Sync`, () => {
         if (update.lsn === 3) {
           aborter2.abort()
           expect(shapeData2).toEqual(
-            new Map([[1, { table: `issue`, id: 1, title: `foo3` }]])
+            new Map([
+              [1, { table: `issue`, id: 1, title: `foo2` }],
+              [2, { table: `issue`, id: 2, title: `foo2` }],
+            ])
           )
           break
         }
@@ -171,6 +183,6 @@ describe(`HTTP Sync`, () => {
       firstLsn = update.lsn
       break
     }
-    expect(firstLsn - currentLastLSN).toBe(5)
+    expect(firstLsn - currentLastLSN).toBe(4)
   })
 })
