@@ -10,7 +10,11 @@ export async function getShapeStream(shapeId: string, options) {
         let upToDate = false
 
         // Initial fetch.
-        await fetch(`http://localhost:3000/shape/issues`, {
+        let initialUrl = `http://localhost:3000/shape/issues`
+        if (options.lsn) {
+          initialUrl += `?lsn=${options.lsn}`
+        }
+        await fetch(initialUrl, {
           signal: options.signal,
         }).then(async ({ body }) => {
           const readable = body!
@@ -51,7 +55,7 @@ export async function getShapeStream(shapeId: string, options) {
 
         controller.close()
       } catch (error) {
-        console.error(`error`, error)
+        // console.error(`error`, error)
       }
     },
   })

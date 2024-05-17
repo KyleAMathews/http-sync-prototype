@@ -21,7 +21,7 @@ function streamData(res) {
 
 const snapshot = new Map([
   [
-    `table-1`,
+    `issue-1`,
     {
       type: `data`,
       lsn: 0,
@@ -43,11 +43,40 @@ const opsLog = [
   },
 ]
 
+export let lastSnapshotLSN = 0
+
+function compactSnapshot() {
+  if (snapshot.size * 1.3 < opsLog.length - lastSnapshotLSN) {
+    opsLog.slice(lastSnapshotLSN).forEach((op) => {
+      snapshot.set(`${op.data.table}-${op.data.id}`, op)
+    })
+    lastSnapshotLSN = opsLog.slice(-1)[0].lsn
+  }
+}
+
 const openConnections = new Map()
+let lastId = 1
 
 export function appendRow() {
   // get last row from ops log and then append new one
   // to ops log and write to open connections
+  const lastLsn = opsLog.slice(-1)[0].lsn
+  lastId = lastId + 1
+  const newOp = {
+    type: `data`,
+    lsn: lastLsn + 1,
+    data: { table: `issue`, id: lastId, title: `foo${lastLsn}` },
+  }
+
+  console.log(`writing new op to connections`, { lsn: newOp.lsn })
+  openConnections.forEach((resultStreamer) => {
+    resultStreamer.write(newOp)
+    resultStreamer.write({ type: `heartbeat` })
+  })
+
+  compactSnapshot()
+
+  opsLog.push(newOp)
 }
 
 export function updateRow(id) {
@@ -68,18 +97,52 @@ export function updateRow(id) {
   newOp.data.title = `foo${newLsn}`
   newOp.lsn = newLsn
   opsLog.push(newOp)
-  console.log(`writing new op to connections`, { newOp })
+  console.log(`writing new op to connections`, { lsn: newOp.lsn })
   openConnections.forEach((resultStreamer) => {
     resultStreamer.write(newOp)
     resultStreamer.write({ type: `heartbeat` })
   })
+
+  compactSnapshot()
 }
 
 export function createServer() {
   const app = express()
   app.use(bodyParser.json())
+  // Middleware to check if request is from a browser
+  const isBrowserRequest = (req, res, next) => {
+    const userAgent = req.headers[`user-agent`]
+    if (userAgent) {
+      const isBrowser = /Mozilla|Chrome|Safari|Opera|Edge|Trident/.test(
+        userAgent
+      )
+      if (isBrowser) {
+        req.isBrowser = true
+      } else {
+        req.isBrowser = false
+      }
+    } else {
+      console.log(`No User-Agent header found.`)
+      req.isBrowser = false
+    }
+    next()
+  }
+
+  // Use the middleware
+  app.use(isBrowserRequest)
 
   const port = 3000
+
+  app.post(`/shape/issues/update-row/:id`, (req: Request, res: Response) => {
+    const rowId = parseInt(req.params.id, 10)
+    updateRow(rowId)
+    res.send(`ok`)
+  })
+
+  app.post(`/shape/issues/append-row/`, (req: Request, res: Response) => {
+    appendRow()
+    res.send(`ok`)
+  })
 
   // Endpoint to get initial data and subscribe to updates
   app.get(`/shape/:id`, async (req: Request, res: Response) => {
@@ -110,7 +173,7 @@ export function createServer() {
           })
           resultStreamer.end()
           await streamPipeline
-        } else {
+        } else if (req.isBrowser) {
           console.log(`live updates`, { lsn })
           async function close() {
             clearTimeout(timeoutId)
@@ -129,6 +192,8 @@ export function createServer() {
           req.on(`close`, () => {
             close()
           })
+        } else {
+          res.status(204).send(`no updates`)
         }
       }
     } else {
