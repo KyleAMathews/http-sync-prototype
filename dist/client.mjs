@@ -1,7 +1,4 @@
 var __defProp = Object.defineProperty;
-var __knownSymbol = (name, symbol) => {
-  return (symbol = Symbol[name]) ? symbol : Symbol.for("Symbol." + name);
-};
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -37,61 +34,21 @@ var __privateMethod = (obj, member, method) => {
   __accessCheck(obj, member, "access private method");
   return method;
 };
-var __async = (__this, __arguments, generator) => {
-  return new Promise((resolve, reject) => {
-    var fulfilled = (value) => {
-      try {
-        step(generator.next(value));
-      } catch (e) {
-        reject(e);
-      }
-    };
-    var rejected = (value) => {
-      try {
-        step(generator.throw(value));
-      } catch (e) {
-        reject(e);
-      }
-    };
-    var step = (x) => x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected);
-    step((generator = generator.apply(__this, __arguments)).next());
-  });
-};
-var __await = function(promise, isYieldStar) {
-  this[0] = promise;
-  this[1] = isYieldStar;
-};
-var __asyncGenerator = (__this, __arguments, generator) => {
-  var resume = (k, v, yes, no) => {
-    try {
-      var x = generator[k](v), isAwait = (v = x.value) instanceof __await, done = x.done;
-      Promise.resolve(isAwait ? v[0] : v).then((y) => isAwait ? resume(k === "return" ? k : "next", v[1] ? { done: y.done, value: y.value } : y, yes, no) : yes({ value: y, done })).catch((e) => resume("throw", e, yes, no));
-    } catch (e) {
-      no(e);
-    }
-  };
-  var method = (k) => it[k] = (x) => new Promise((yes, no) => resume(k, x, yes, no));
-  var it = {};
-  return generator = generator.apply(__this, __arguments), it[__knownSymbol("asyncIterator")] = () => it, method("next"), method("throw"), method("return"), it;
-};
-var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")]) ? it.call(obj) : (obj = obj[__knownSymbol("iterator")](), it = {}, method = (key, fn) => (fn = obj[key]) && (it[key] = (arg) => new Promise((yes, no, done) => (arg = fn.call(obj, arg), done = arg.done, Promise.resolve(arg.value).then((value) => yes({ value, done }), no)))), method("next"), method("return"), it);
 
 // mod.js
 if (typeof ReadableStream.prototype[Symbol.asyncIterator] !== "function") {
-  ReadableStream.prototype[Symbol.asyncIterator] = function() {
-    return __asyncGenerator(this, null, function* () {
-      const reader = this.getReader();
-      try {
-        while (true) {
-          const { done, value } = yield new __await(reader.read());
-          if (done)
-            return;
-          yield value;
-        }
-      } finally {
-        reader.releaseLock();
+  ReadableStream.prototype[Symbol.asyncIterator] = async function* () {
+    const reader = this.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done)
+          return;
+        yield value;
       }
-    });
+    } finally {
+      reader.releaseLock();
+    }
   };
 }
 "\r".charCodeAt(0);
@@ -222,81 +179,35 @@ var JSONLinesStringifyStream = class extends TransformStream {
 };
 
 // client.ts
-function getShapeStream(shapeId, options) {
-  return __async(this, null, function* () {
-    const stream = new ReadableStream({
-      start(controller) {
-        return __async(this, null, function* () {
-          try {
-            let lastLSN = 0;
-            let upToDate = false;
-            let initialUrl = `http://localhost:3000/shape/issues`;
-            if (options.lsn) {
-              initialUrl += `?lsn=${options.lsn}`;
-            }
-            yield fetch(initialUrl, {
-              signal: options.signal
-            }).then((_0) => __async(this, [_0], function* ({ body }) {
-              const readable = body.pipeThrough(new TextDecoderStream()).pipeThrough(new JSONLinesParseStream());
-              try {
-                for (var iter = __forAwait(readable), more, temp, error; more = !(temp = yield iter.next()).done; more = false) {
-                  const update = temp.value;
-                  controller.enqueue(update);
-                  if (update.type === `data`) {
-                    if (update.lsn > lastLSN) {
-                      lastLSN = update.lsn;
-                    }
-                  }
-                }
-              } catch (temp) {
-                error = [temp];
-              } finally {
-                try {
-                  more && (temp = iter.return) && (yield temp.call(iter));
-                } finally {
-                  if (error)
-                    throw error[0];
-                }
+async function getShapeStream(shapeId, options) {
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        let lastLSN = options.lsn || -1;
+        let upToDate = false;
+        while (!upToDate || options.subscribe) {
+          console.log({ lastLSN, upToDate, options: options.subscribe });
+          await fetch(`http://localhost:3000/shape/issues?lsn=${lastLSN}`, {
+            signal: options.signal
+          }).then(async ({ body }) => {
+            const readable = body.pipeThrough(new TextDecoderStream()).pipeThrough(new JSONLinesParseStream());
+            for await (const update of readable) {
+              controller.enqueue(update);
+              if (update.type === `data`) {
+                lastLSN = update.lsn;
               }
-            }));
-            console.log(`done with initial fetch`);
-            while (options.subscribe || !upToDate) {
-              console.log({ lastLSN, upToDate, options: options.subscribe });
-              yield fetch(`http://localhost:3000/shape/issues?lsn=${lastLSN}`, {
-                signal: options.signal
-              }).then((_0) => __async(this, [_0], function* ({ body }) {
-                const readable = body.pipeThrough(new TextDecoderStream()).pipeThrough(new JSONLinesParseStream());
-                try {
-                  for (var iter = __forAwait(readable), more, temp, error; more = !(temp = yield iter.next()).done; more = false) {
-                    const update = temp.value;
-                    controller.enqueue(update);
-                    if (update.type === `data`) {
-                      lastLSN = update.lsn;
-                    }
-                    if (update.type === `up-to-date`) {
-                      upToDate = true;
-                    }
-                  }
-                } catch (temp) {
-                  error = [temp];
-                } finally {
-                  try {
-                    more && (temp = iter.return) && (yield temp.call(iter));
-                  } finally {
-                    if (error)
-                      throw error[0];
-                  }
-                }
-              }));
+              if (update.type === `up-to-date`) {
+                upToDate = true;
+              }
             }
-            controller.close();
-          } catch (error) {
-          }
-        });
+          });
+        }
+        controller.close();
+      } catch (error) {
       }
-    });
-    return stream;
+    }
   });
+  return stream;
 }
 export {
   getShapeStream

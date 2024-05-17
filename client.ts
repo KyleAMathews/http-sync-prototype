@@ -5,35 +5,11 @@ export async function getShapeStream(shapeId: string, options) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        let lastLSN = 0
+        let lastLSN = options.lsn || -1
         let upToDate = false
 
-        // Initial fetch.
-        let initialUrl = `http://localhost:3000/shape/issues`
-        if (options.lsn) {
-          initialUrl += `?lsn=${options.lsn}`
-        }
-        await fetch(initialUrl, {
-          signal: options.signal,
-        }).then(async ({ body }) => {
-          const readable = body!
-            .pipeThrough(new TextDecoderStream())
-            .pipeThrough(new JSONLinesParseStream())
-
-          for await (const update of readable) {
-            controller.enqueue(update)
-            if (update.type === `data`) {
-              if (update.lsn > lastLSN) {
-                lastLSN = update.lsn
-              }
-            }
-          }
-        })
-
-        console.log(`done with initial fetch`)
-
-        // Continue to fetch.
-        while (options.subscribe || !upToDate) {
+        // fetch loop.
+        while (!upToDate || options.subscribe) {
           console.log({ lastLSN, upToDate, options: options.subscribe })
           await fetch(`http://localhost:3000/shape/issues?lsn=${lastLSN}`, {
             signal: options.signal,

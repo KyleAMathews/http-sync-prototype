@@ -183,6 +183,7 @@ describe(`HTTP Sync`, () => {
       firstLsn = update.lsn
       break
     }
+    console.log({ currentLastLSN, firstLsn })
     expect(firstLsn - currentLastLSN).toBe(4)
   })
 })

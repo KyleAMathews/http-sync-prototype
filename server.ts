@@ -156,52 +156,52 @@ export function createServer() {
     const reqId = Math.random()
     const shapeId = req.params.id
 
+    const lsn = parseInt(req.query.lsn, 10)
+    console.log({ lsn })
+
     // Send initial cached response
     if (shapeId === `issues`) {
-      if (!req.query.lsn) {
-        console.log(`snapshot`, snapshot.values())
+      if (lsn === -1) {
+        console.log(`return snapshot`)
         const { resultStreamer, streamPipeline } = streamData(res)
         for (const row of snapshot.values()) {
           resultStreamer.write(row)
         }
         resultStreamer.end()
         await streamPipeline
-      } else {
-        const lsn = parseInt(req.query.lsn, 10)
-        if (lsn + 1 < opsLog.length) {
-          console.log(`catch-up updates`, { lsn })
-          const { resultStreamer, streamPipeline } = streamData(res)
-          // Catch up the user
-          for (const row of opsLog.slice(lsn + 1)) {
-            resultStreamer.write(row)
-          }
-          resultStreamer.write({
-            type: `up-to-date`,
-          })
+      } else if (lsn + 1 < opsLog.length) {
+        console.log(`catch-up updates`, { lsn })
+        const { resultStreamer, streamPipeline } = streamData(res)
+        // Catch up the user
+        for (const row of opsLog.slice(lsn + 1)) {
+          resultStreamer.write(row)
+        }
+        resultStreamer.write({
+          type: `up-to-date`,
+        })
+        resultStreamer.end()
+        await streamPipeline
+      } else if (req.isBrowser) {
+        console.log(`live updates`, { lsn })
+        async function close() {
+          clearTimeout(timeoutId)
+          openConnections.delete(reqId)
           resultStreamer.end()
           await streamPipeline
-        } else if (req.isBrowser) {
-          console.log(`live updates`, { lsn })
-          async function close() {
-            clearTimeout(timeoutId)
-            openConnections.delete(reqId)
-            resultStreamer.end()
-            await streamPipeline
-          }
-
-          const { resultStreamer, streamPipeline } = streamData(res)
-          openConnections.set(reqId, resultStreamer)
-
-          const timeoutId = setTimeout(() => {
-            close()
-          }, 30000) // Timeout after 30 seconds
-
-          req.on(`close`, () => {
-            close()
-          })
-        } else {
-          res.status(204).send(`no updates`)
         }
+
+        const { resultStreamer, streamPipeline } = streamData(res)
+        openConnections.set(reqId, resultStreamer)
+
+        const timeoutId = setTimeout(() => {
+          close()
+        }, 30000) // Timeout after 30 seconds
+
+        req.on(`close`, () => {
+          close()
+        })
+      } else {
+        res.status(204).send(`no updates`)
       }
     } else {
       res.status(404).send(`Shape not found`)
