@@ -30,11 +30,13 @@ const opsLog = [
 export let lastSnapshotLSN = 0
 
 function compactSnapshot() {
+  let maxLSN = 0
   if (snapshot.size * 1.3 < opsLog.length - lastSnapshotLSN) {
     opsLog.slice(lastSnapshotLSN).forEach((op) => {
+      maxLSN = Math.max(op.lsn, maxLSN)
       snapshot.set(`${op.data.table}-${op.data.id}`, op)
     })
-    lastSnapshotLSN = opsLog.slice(-1)[0].lsn
+    lastSnapshotLSN = maxLSN
   }
 }
 
@@ -134,6 +136,9 @@ export function createServer() {
 
   // Endpoint to get initial data and subscribe to updates
   app.get(`/shape/:id`, async (req: Request, res: Response) => {
+    // Set caching headers.
+    res.set(`Cache-Control`, `max-age=60, stale-while-revalidate=300`)
+
     const reqId = Math.random()
     const shapeId = req.params.id
 
@@ -144,9 +149,27 @@ export function createServer() {
     if (shapeId === `issues`) {
       if (lsn === -1) {
         console.log(`return snapshot`)
+        const etag = lastSnapshotLSN
+        res.set(`etag`, etag)
+
+        // Check If-None-Match header for ETag validation
+        const ifNoneElse = req.headers[`if-none-else`]
+        if (ifNoneElse === etag.toString()) {
+          return res.status(304).end() // Not Modified
+        }
+
         return res.json([...snapshot.values()])
       } else if (lsn + 1 < opsLog.length) {
         console.log(`catch-up updates`, { lsn })
+        const etag = opsLog.slice(-1)[0].lsn
+        res.set(`etag`, etag)
+
+        // Check If-None-Match header for ETag validation
+        const ifNoneElse = req.headers[`if-none-else`]
+        if (ifNoneElse === etag.toString()) {
+          return res.status(304).end() // Not Modified
+        }
+
         return res.json([...opsLog.slice(lsn + 1), { type: `up-to-date` }])
       } else if (req.isBrowser) {
         console.log(`live updates`, { lsn })
