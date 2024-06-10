@@ -138,7 +138,7 @@ export function createServer() {
     const shapeId = req.params.id
 
     const lsn = parseInt(req.query.lsn, 10)
-    console.log({ lsn })
+    console.log(`server /shape:id`, { lsn })
 
     // Send initial cached response
     if (shapeId === `issues`) {

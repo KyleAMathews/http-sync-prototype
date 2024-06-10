@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import "./App.css"
-import { getShapeStream } from "../../dist/client"
+import { ShapeStream } from "../../dist/client"
 
 function useShape(shapeId) {
   const [shapeData, setShapeData] = useState([])
@@ -12,11 +12,11 @@ function useShape(shapeId) {
       function updateSubscribers() {
         setShapeData([...shapeMap.values()])
       }
-      const initialDataStream = await getShapeStream(`issues`, {
+      const issueStream = new ShapeStream({
         subscribe: true,
       })
-      console.log({initialDataStream})
-      for await (const update of initialDataStream) {
+      console.log({issueStream})
+      issueStream.subscribe(update => {
         console.log({ update })
 
         if (update.type === `data`) {
@@ -29,7 +29,7 @@ function useShape(shapeId) {
           upToDate = true
           updateSubscribers()
         }
-      }
+      })
     }
     stream()
   }, [])
