@@ -2,23 +2,6 @@ import express from "express"
 import { Request, Response } from "express"
 import bodyParser from "body-parser"
 import cors from "cors"
-import { pipeline } from "node:stream/promises"
-import Stringer from "stream-json/jsonl/Stringer"
-
-function streamData(res) {
-  res.writeHead(200, {
-    "Content-Type": `text/plain`,
-    "Transfer-Encoding": `chunked`,
-    Connection: `keep-alive`,
-    "Access-Control-Allow-Origin": `*`,
-  })
-  const resultStreamer = new Stringer()
-  const streamPipeline = pipeline(resultStreamer, res).catch((err) => {
-    console.log(err)
-  })
-
-  return { resultStreamer, streamPipeline }
-}
 
 const snapshot = new Map([
   [
@@ -69,11 +52,10 @@ export function appendRow() {
     data: { table: `issue`, id: lastId, title: `foo${lastLsn + 1}` },
   }
 
-  console.log(`writing new op to connections`, { lsn: newOp.lsn })
-  openConnections.forEach((resultStreamer) => {
-    resultStreamer.write(newOp)
-    resultStreamer.write({ type: `heartbeat` })
+  openConnections.forEach((res) => {
+    res.json([newOp])
   })
+  openConnections.clear()
 
   compactSnapshot()
 
@@ -98,11 +80,10 @@ export function updateRow(id) {
   newOp.data.title = `foo${newLsn}`
   newOp.lsn = newLsn
   opsLog.push(newOp)
-  console.log(`writing new op to connections`, { lsn: newOp.lsn })
-  openConnections.forEach((resultStreamer) => {
-    resultStreamer.write(newOp)
-    resultStreamer.write({ type: `heartbeat` })
+  openConnections.forEach((res) => {
+    res.json([newOp])
   })
+  openConnections.clear()
 
   compactSnapshot()
 }
@@ -163,43 +144,21 @@ export function createServer() {
     if (shapeId === `issues`) {
       if (lsn === -1) {
         console.log(`return snapshot`)
-        const { resultStreamer, streamPipeline } = streamData(res)
-        for (const row of snapshot.values()) {
-          resultStreamer.write(row)
-        }
-        resultStreamer.end()
-        await streamPipeline
+        return res.json([...snapshot.values()])
       } else if (lsn + 1 < opsLog.length) {
         console.log(`catch-up updates`, { lsn })
-        const { resultStreamer, streamPipeline } = streamData(res)
-        // Catch up the user
-        for (const row of opsLog.slice(lsn + 1)) {
-          resultStreamer.write(row)
-        }
-        resultStreamer.write({
-          type: `up-to-date`,
-        })
-        resultStreamer.end()
-        await streamPipeline
+        return res.json([...opsLog.slice(lsn + 1), { type: `up-to-date` }])
       } else if (req.isBrowser) {
         console.log(`live updates`, { lsn })
-        async function close() {
-          clearTimeout(timeoutId)
-          openConnections.delete(reqId)
-          resultStreamer.end()
-          await streamPipeline
+        function close() {
+          res.status(204).send(`no updates`)
         }
 
-        const { resultStreamer, streamPipeline } = streamData(res)
-        openConnections.set(reqId, resultStreamer)
+        openConnections.set(reqId, res)
 
-        const timeoutId = setTimeout(() => {
-          close()
-        }, 30000) // Timeout after 30 seconds
+        const timeoutId = setTimeout(() => close, 30000) // Timeout after 30 seconds
 
-        req.on(`close`, () => {
-          close()
-        })
+        req.on(`close`, () => clearTimeout(timeoutId))
       } else {
         res.status(204).send(`no updates`)
       }

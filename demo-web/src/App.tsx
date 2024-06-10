@@ -15,6 +15,7 @@ function useShape(shapeId) {
       const initialDataStream = await getShapeStream(`issues`, {
         subscribe: true,
       })
+      console.log({initialDataStream})
       for await (const update of initialDataStream) {
         console.log({ update })
 
@@ -46,9 +47,11 @@ function App() {
         <h1>useShape</h1>
         <ul>
           {issues.map((issue) => {
-            return <li>
-              <pre>{JSON.stringify(issue)}</pre>
-            </li>
+            return (
+              <li>
+                <pre>{JSON.stringify(issue)}</pre>
+              </li>
+            )
           })}
         </ul>
       </div>
