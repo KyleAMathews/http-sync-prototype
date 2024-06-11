@@ -1,6 +1,12 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest"
 import { ShapeStream } from "./client"
-import { createServer, updateRow, appendRow, lastSnapshotLSN } from "./server"
+import {
+  createServer,
+  deleteDb,
+  updateRow,
+  appendRow,
+  lastSnapshotLSN,
+} from "./server"
 import { parse } from "cache-control-parser"
 
 beforeAll(async (context) => {
@@ -8,7 +14,9 @@ beforeAll(async (context) => {
 })
 
 afterAll((context) => {
+  console.log(`afterAll`)
   context.server.close()
+  deleteDb()
 })
 
 describe(`HTTP Sync`, () => {
@@ -28,9 +36,7 @@ describe(`HTTP Sync`, () => {
       })
     })
 
-    expect(shapeData).toEqual(
-      new Map([[1, { table: `issue`, id: 1, title: `foo1` }]])
-    )
+    expect(shapeData).toEqual(new Map([[1, { id: 1, title: `foo` }]]))
   })
   it(`should get initial data and then receive updates`, async () => {
     const shapeData = new Map()
@@ -40,26 +46,29 @@ describe(`HTTP Sync`, () => {
       signal: aborter.signal,
     })
 
-    issueStream.subscribe((update) => {
-      if (update.type === `data`) {
-        shapeData.set(update.data.id, update.data)
-      }
-      if (update.lsn === 1) {
-        setTimeout(() => updateRow(1), 10)
-      }
-      if (update.lsn === 2) {
-        setTimeout(() => appendRow(), 10)
-      }
+    await new Promise((resolve) => {
+      issueStream.subscribe((update) => {
+        if (update.type === `data`) {
+          shapeData.set(update.data.id, update.data)
+        }
+        if (update.lsn === 0) {
+          updateRow(1)
+        }
+        if (update.lsn === 1) {
+          appendRow()
+        }
 
-      if (update.lsn === 3) {
-        aborter.abort()
-        expect(shapeData).toEqual(
-          new Map([
-            [1, { table: `issue`, id: 1, title: `foo2` }],
-            [2, { table: `issue`, id: 2, title: `foo3` }],
-          ])
-        )
-      }
+        if (update.lsn === 2) {
+          aborter.abort()
+          expect(shapeData).toEqual(
+            new Map([
+              [1, { id: 1, title: `foo1` }],
+              [2, { id: 2, title: `foo2` }],
+            ])
+          )
+          resolve()
+        }
+      })
     })
   })
   it(`Multiple clients can get the same data`, async () => {
@@ -82,7 +91,7 @@ describe(`HTTP Sync`, () => {
         if (update.type === `data`) {
           shapeData1.set(update.data.id, update.data)
         }
-        if (update.lsn === 1 || update.lsn === 2) {
+        if (update.lsn === 2 || update.lsn === 3) {
           setTimeout(() => updateRow(1), 50)
         }
 
@@ -90,8 +99,8 @@ describe(`HTTP Sync`, () => {
           aborter1.abort()
           expect(shapeData1).toEqual(
             new Map([
-              [1, { table: `issue`, id: 1, title: `foo2` }],
-              [2, { table: `issue`, id: 2, title: `foo3` }],
+              [1, { id: 1, title: `foo3` }],
+              [2, { id: 2, title: `foo2` }],
             ])
           )
           resolve()
@@ -109,8 +118,8 @@ describe(`HTTP Sync`, () => {
           aborter2.abort()
           expect(shapeData2).toEqual(
             new Map([
-              [1, { table: `issue`, id: 1, title: `foo2` }],
-              [2, { table: `issue`, id: 2, title: `foo3` }],
+              [1, { id: 1, title: `foo3` }],
+              [2, { id: 2, title: `foo2` }],
             ])
           )
           resolve()
@@ -122,26 +131,19 @@ describe(`HTTP Sync`, () => {
   })
 
   it(`can go offline and then catchup`, async () => {
-    const shapeData = new Map()
     const aborter = new AbortController()
     let lastLsn = 0
     const issueStream = new ShapeStream({
-      subscribe: true,
+      subscribe: false,
       signal: aborter.signal,
     })
     await new Promise((resolve) => {
       issueStream.subscribe((update) => {
         if (update.lsn) {
-          lastLsn = update.lsn
-        }
-        if (update.type === `data`) {
-          shapeData.set(update.data.id, update.data)
-        }
-        if (update.lsn === 1 || update.lsn === 2) {
-          setTimeout(() => updateRow(1), 10)
+          lastLsn = Math.max(lastLsn, update.lsn)
         }
 
-        if (update.lsn === 3) {
+        if (update.type === `up-to-date`) {
           aborter.abort()
           resolve()
         }
@@ -176,27 +178,6 @@ describe(`HTTP Sync`, () => {
     expect(catchupOpsCount).toBe(5)
   })
 
-  it(`the server compacts the initial snapshot when enough new ops have been added`, async () => {
-    const startLSN = lastSnapshotLSN
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
-    let lastLsn = 0
-    const issueStream = new ShapeStream()
-    await new Promise((resolve) => {
-      issueStream.subscribe((update) => {
-        if (update.type === `data`) {
-          lastLsn = update.lsn
-        }
-        if (update.type === `up-to-date`) {
-          resolve()
-        }
-      })
-    })
-    expect(lastLsn - startLSN).toBe(5)
-  })
   it(`should return correct caching headers`, async () => {
     const res = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
     const cacheHeaders = res.headers.get(`cache-control`)

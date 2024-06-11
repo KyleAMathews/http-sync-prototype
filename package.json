@@ -23,7 +23,9 @@
     "body-parser": "^1.20.2",
     "cache-control-parser": "^2.0.6",
     "cors": "^2.8.5",
+    "deep-equal": "^2.2.3",
     "express": "^4.19.2",
+    "lmdb": "^3.0.12",
     "stream-json": "^1.8.0"
   }
 }
