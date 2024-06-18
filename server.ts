@@ -4,9 +4,92 @@ import bodyParser from "body-parser"
 import cors from "cors"
 import { open } from "lmdb" // or require
 import deepEqual from "deep-equal"
+import Database from "better-sqlite3"
+import { electrify } from "electric-sql/node"
+import jwt from "jsonwebtoken"
+import { v4 as uuidv4 } from "uuid"
+
+function unsignedJWT(userId, customClaims) {
+  const claims = customClaims || {}
+
+  return jwt.sign({ ...claims, sub: userId }, ``, { algorithm: `none` })
+}
 
 const fs = require(`fs`)
 const path = `./wal` // Replace with your directory path
+
+const shapes = new Map()
+async function getShape({ db, shapeId }) {
+  if (shapes.has(shapeId)) {
+    return shapes.get(shapeId)
+  } else {
+    const shape = new Map()
+    const snapshot = new Map()
+    const data = new Map()
+    shapes.set(shapeId, shape)
+    let lsn = 0
+    const shapeSync = await db[shapeId].sync()
+    await shapeSync.synced
+    const liveQuery = await db[shapeId].liveMany()
+
+    const res = await liveQuery()
+    res.result.forEach((row) => {
+      const log = {
+        type: `data`,
+        lsn,
+        data: { ...row },
+      }
+      data.set(row.id, row)
+      snapshot.set(row.id, log)
+      lmdb.putSync(`${shapeId}-snapshot-${row.id}`, log)
+      lmdb.putSync(`${shapeId}-snapshotHighLsn`, lsn)
+      lmdb.putSync(`${shapeId}-log-${lsn}`, log)
+      lsn += 1
+    })
+    lmdb.putSync(`${shapeId}-has-snapshot`, true)
+    shape.set(`snapshot`, snapshot)
+    shape.set(`data`, data)
+    const unsubscribe = liveQuery.subscribe((resultUpdate) => {
+      let lastLsn = getLastLogForShape(`issues`).lsn
+      lastLsn += 1
+
+      const newData = new Map()
+      resultUpdate.results.forEach((row) => newData.set(row.id, row))
+
+      const operations = diffMaps(shape.get(`data`), newData)
+
+      const opsWithLSN = operations.map((op) => {
+        const opWithLsn = { ...op, lsn: lastLsn }
+        lastLsn += 1
+        return opWithLsn
+      })
+      openConnections.forEach((res) => {
+        res.json([opsWithLSN])
+      })
+      openConnections.clear()
+
+      opsWithLSN.forEach((op) => {
+        lmdb.putSync(`issues-log-${op.lsn}`, op)
+      })
+
+      opsWithLSN.forEach((op) => {
+        if (op.type === `data`) {
+          // lmdb.put(`${shapeId}-snapshot-${op.data.id}`, op)
+          snapshot.set(op.data.id, op)
+        } else if (op.type === `gone`) {
+          // lmdb.removeSync(`${shapeId}-snapshot-${op.data.id}`)
+          snapshot.delete(op.data.id)
+        }
+      })
+      shape.set(`snapshot`, snapshot)
+      shape.set(`data`, newData)
+    })
+
+    shape.unsubscribe = unsubscribe
+
+    return shape
+  }
+}
 
 // Function to delete directory and its contents synchronously
 function deleteDirectorySync(dirPath) {
@@ -47,30 +130,6 @@ export function deleteDb() {
 }
 
 const fakeDb = new Map([[1, { id: 1, title: `foo` }]])
-
-const snapshot = new Map([
-  [
-    `issue-1`,
-    {
-      type: `data`,
-      lsn: 0,
-      data: { table: `issue`, id: 1, title: `foo` },
-    },
-  ],
-])
-
-const opsLog = [
-  {
-    type: `data`,
-    lsn: 0,
-    data: { table: `issue`, id: 1, title: `foo` },
-  },
-  {
-    type: `data`,
-    lsn: 1,
-    data: { table: `issue`, id: 1, title: `foo1` },
-  },
-]
 
 export const lastSnapshotLSN = 0
 
@@ -147,44 +206,56 @@ function diffMaps(map1, map2) {
   return operations
 }
 
-function updateDbAndDiff(mutation) {
+function updateDbAndDiff(client, mutation) {
   const oldDb = new Map(JSON.parse(JSON.stringify(Array.from(fakeDb))))
   mutation()
   const operations = diffMaps(oldDb, fakeDb)
   return operations
 }
 
-export function appendRow() {
+export async function appendRow({ title, client }) {
   console.log(`appending row`)
+  const uuid = uuidv4()
+  try {
+    await client.query(`insert into issues(id, title) values($1, $2)`, [
+      uuid,
+      title,
+    ])
+  } catch (e) {
+    console.log(e)
+    throw e
+  }
+
+  return uuid
   // get last row from ops log and then append new one
   // to ops log and write to open connections
-  const lastLog = getLastLogForShape(`issues`)
-  let lastLsn = lastLog.lsn
-  lastLsn += 1
-  const newId = lastLog.data.id + 1
-  const newRow = { id: newId, title: `foo${lastLsn}` }
+  // const lastLog = getLastLogForShape(`issues`)
+  // let lastLsn = lastLog.lsn
+  // lastLsn += 1
+  // const newId = lastLog.data.id + 1
+  // const newRow = { id: newId, title: `foo${lastLsn}` }
 
-  const newOperations = updateDbAndDiff(() => {
-    fakeDb.set(newId, newRow)
-  })
+  // const newOperations = updateDbAndDiff(client, () => {
+  // fakeDb.set(newId, newRow)
+  // })
 
-  const opsWithLSN = newOperations.map((op) => {
-    const opWithLsn = { ...op, lsn: lastLsn }
-    lastLsn += 1
-    return opWithLsn
-  })
+  // const opsWithLSN = newOperations.map((op) => {
+  // const opWithLsn = { ...op, lsn: lastLsn }
+  // lastLsn += 1
+  // return opWithLsn
+  // })
 
-  openConnections.forEach((res) => {
-    res.json([opsWithLSN])
-  })
-  openConnections.clear()
+  // openConnections.forEach((res) => {
+  // res.json([opsWithLSN])
+  // })
+  // openConnections.clear()
 
-  opsWithLSN.forEach((op) => {
-    lmdb.putSync(`issues-log-${op.lsn}`, op)
-  })
+  // opsWithLSN.forEach((op) => {
+  // lmdb.putSync(`issues-log-${op.lsn}`, op)
+  // })
 
-  const shapeId = `issues`
-  compactSnapshot({ shapeId, operations: opsWithLSN })
+  // const shapeId = `issues`
+  // compactSnapshot({ shapeId, operations: opsWithLSN })
 }
 
 function getLastLogForShape(shapeId = `issues`) {
@@ -201,35 +272,27 @@ function getLastLogForShape(shapeId = `issues`) {
   return lastLog
 }
 
-export function updateRow(id) {
-  // // Update the DB & then opsLog w/ diff
-  console.log(`updating row`, { id })
-  let lastLsn = getLastLogForShape(`issues`).lsn
-  lastLsn += 1
-  const newOperations = updateDbAndDiff(() => {
-    const row = fakeDb.get(id)
-    row.title = `foo${lastLsn}`
-    fakeDb.set(id, row)
-  })
-  const opsWithLSN = newOperations.map((op) => {
-    const opWithLsn = { ...op, lsn: lastLsn }
-    lastLsn += 1
-    return opWithLsn
-  })
-  openConnections.forEach((res) => {
-    res.json([opsWithLSN])
-  })
-  openConnections.clear()
-
-  opsWithLSN.forEach((op) => {
-    lmdb.putSync(`issues-log-${op.lsn}`, op)
-  })
-
-  const shapeId = `issues`
-  compactSnapshot({ shapeId, operations: opsWithLSN })
+export async function updateRow({ id, client, title }) {
+  console.log(`updating row`, { id, title })
+  try {
+    await client.query(`update issues set title = $1 where id = $2`, [
+      title,
+      id,
+    ])
+  } catch (e) {
+    console.log(e)
+  }
 }
 
-export function createServer() {
+export async function createServer({ schema, config }) {
+  console.log(`inside createServer`)
+  const runId = Math.random()
+  const conn = new Database(`test-dbs/${runId}.db`)
+  const electric = await electrify(conn, schema, config)
+  const token = unsignedJWT(`1`)
+  await electric.connect(token)
+  const { db } = electric
+
   const app = express()
 
   // Enable CORS for all routes
@@ -289,48 +352,17 @@ export function createServer() {
 
     console.log({ opsLogLength, isCatchUp, query: req.query })
     if (lsn === -1) {
-      console.log(`return snapshot`)
-      // Is there a snapshot already?
-      const isSnapshot = lmdb.doesExist(`${shapeId}-has-snapshot`)
-      const snapshot = []
-      console.log({ isSnapshot })
-      if (isSnapshot) {
-        const etag = lastSnapshotLSN
-        res.set(`etag`, etag)
+      const shape = await getShape({ db, shapeId })
+      const etag = lastSnapshotLSN
+      res.set(`etag`, etag)
 
-        // Check If-None-Match header for ETag validation
-        const ifNoneElse = req.headers[`if-none-else`]
-        if (ifNoneElse === etag.toString()) {
-          return res.status(304).end() // Not Modified
-        }
-
-        // Ok, retrieve snapshot and return.
-        for (const { key, value } of lmdb.getRange({
-          start: `${shapeId}-snapshot-`,
-          end: `${shapeId}-snapshot-${MAX_VALUE}`,
-        })) {
-          snapshot.push(value)
-        }
-      } else {
-        console.log(`generate snapshot`)
-        // Generate a snapshot
-        let lsn = 0
-        fakeDb.forEach((row) => {
-          const log = {
-            type: `data`,
-            lsn,
-            data: { ...row },
-          }
-          snapshot.push(log)
-          lmdb.putSync(`${shapeId}-snapshot-${row.id}`, log)
-          lmdb.putSync(`${shapeId}-snapshotHighLsn`, lsn)
-          lmdb.putSync(`${shapeId}-log-${lsn}`, log)
-          lsn += 1
-        })
-        lmdb.putSync(`${shapeId}-has-snapshot`, true)
+      // Check If-None-Match header for ETag validation
+      const ifNoneElse = req.headers[`if-none-else`]
+      if (ifNoneElse === etag.toString()) {
+        return res.status(304).end() // Not Modified
       }
 
-      return res.json([...snapshot])
+      return res.json([...shape.get(`snapshot`).values()])
     } else if (isCatchUp || lsn + 1 < opsLogLength) {
       console.log(`catch-up`, { lsn, opsLogLength })
       const slicedOperations = []
@@ -370,7 +402,7 @@ export function createServer() {
   return new Promise((resolve) => {
     const server = app.listen(port, () => {
       console.log(`Server running at http://localhost:${port}`)
-      resolve(server)
+      resolve({ express: server, electric })
     })
     server.on(`close`, () => {
       console.log(`Server closed.`)

@@ -1,0 +1,6 @@
+CREATE TABLE issues (
+    id UUID PRIMARY KEY,
+    title TEXT NOT NULL
+);
+
+ALTER TABLE issues ENABLE ELECTRIC;

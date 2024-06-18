@@ -20,12 +20,18 @@
   },
   "dependencies": {
     "@faker-js/faker": "^8.4.1",
+    "@types/pg": "^8.11.6",
+    "better-sqlite3": "^11.0.0",
     "body-parser": "^1.20.2",
     "cache-control-parser": "^2.0.6",
     "cors": "^2.8.5",
     "deep-equal": "^2.2.3",
+    "electric-sql": "^0.12.0",
     "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
     "lmdb": "^3.0.12",
-    "stream-json": "^1.8.0"
+    "pg": "^8.12.0",
+    "stream-json": "^1.8.0",
+    "uuid": "^10.0.0"
   }
 }

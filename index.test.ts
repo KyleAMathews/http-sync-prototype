@@ -7,20 +7,59 @@ import {
   appendRow,
   lastSnapshotLSN,
 } from "./server"
+import { v4 as uuidv4 } from "uuid"
 import { parse } from "cache-control-parser"
+import { schema } from "./test-electric-instance/src/generated/client"
+import pg from "pg"
+const { Client } = pg
 
-beforeAll(async (context) => {
-  context.server = await createServer()
+let context = {}
+
+beforeAll(async () => {
+  context = {}
+  const client = new Client({
+    host: `localhost`,
+    port: 5532,
+    password: `pg_password`,
+    user: `postgres`,
+    database: `testing-instance`,
+  })
+  await client.connect()
+
+  const uuid = uuidv4()
+  context.rowId = uuid
+  try {
+    await client.query(`insert into issues(id, title) values($1, $2)`, [
+      uuid,
+      `foo`,
+    ])
+  } catch (e) {
+    console.log(e)
+    throw e
+  }
+  context.client = client
+
+  // const config = {
+  // url: `http://localhost:5233`,
+  // }
+  const config = {
+    url: `http://localhost:5233`,
+  }
+  context.server = await createServer({ config, schema })
 })
 
-afterAll((context) => {
+afterAll(async () => {
   console.log(`afterAll`)
-  context.server.close()
+  context.server.express.close()
+  context.server.electric.disconnect()
   deleteDb()
+  await context.client.query(`TRUNCATE TABLE issues`)
+  await context.client.end()
+  context = {}
 })
 
 describe(`HTTP Sync`, () => {
-  it(`should get initial data`, async () => {
+  it.only(`should get initial data`, async () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({ subscribe: false })
@@ -35,10 +74,13 @@ describe(`HTTP Sync`, () => {
         }
       })
     })
+    const values = [...shapeData.values()]
 
-    expect(shapeData).toEqual(new Map([[1, { id: 1, title: `foo` }]]))
+    expect(values).toHaveLength(1)
+    expect(values[0].title).toEqual(`foo`)
   })
-  it(`should get initial data and then receive updates`, async () => {
+  it.only(`should get initial data and then receive updates`, async () => {
+    const { rowId, client } = context
     const shapeData = new Map()
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
@@ -46,32 +88,35 @@ describe(`HTTP Sync`, () => {
       signal: aborter.signal,
     })
 
+    let secondRowId = ``
     await new Promise((resolve) => {
-      issueStream.subscribe((update) => {
+      issueStream.subscribe(async (update) => {
         if (update.type === `data`) {
           shapeData.set(update.data.id, update.data)
         }
         if (update.lsn === 0) {
-          updateRow(1)
+          updateRow({ id: rowId, client, title: `foo1` })
         }
         if (update.lsn === 1) {
-          appendRow()
+          secondRowId = await appendRow({ client, title: `foo2` })
         }
 
         if (update.lsn === 2) {
           aborter.abort()
           expect(shapeData).toEqual(
             new Map([
-              [1, { id: 1, title: `foo1` }],
-              [2, { id: 2, title: `foo2` }],
+              [rowId, { id: rowId, title: `foo1` }],
+              [secondRowId, { id: secondRowId, title: `foo2` }],
             ])
           )
           resolve()
         }
       })
     })
+    context.secondRowId = secondRowId
   })
-  it(`Multiple clients can get the same data`, async () => {
+  it.only(`Multiple clients can get the same data`, async () => {
+    const { rowId, secondRowId, client } = context
     const shapeData1 = new Map()
     const aborter1 = new AbortController()
     const issueStream1 = new ShapeStream({
@@ -92,15 +137,15 @@ describe(`HTTP Sync`, () => {
           shapeData1.set(update.data.id, update.data)
         }
         if (update.lsn === 2 || update.lsn === 3) {
-          setTimeout(() => updateRow(1), 50)
+          setTimeout(() => updateRow({ id: rowId, title: `foo3`, client }), 50)
         }
 
         if (update.lsn === 3) {
           aborter1.abort()
           expect(shapeData1).toEqual(
             new Map([
-              [1, { id: 1, title: `foo3` }],
-              [2, { id: 2, title: `foo2` }],
+              [rowId, { id: rowId, title: `foo3` }],
+              [secondRowId, { id: secondRowId, title: `foo2` }],
             ])
           )
           resolve()
@@ -118,8 +163,8 @@ describe(`HTTP Sync`, () => {
           aborter2.abort()
           expect(shapeData2).toEqual(
             new Map([
-              [1, { id: 1, title: `foo3` }],
-              [2, { id: 2, title: `foo2` }],
+              [rowId, { id: rowId, title: `foo3` }],
+              [secondRowId, { id: secondRowId, title: `foo2` }],
             ])
           )
           resolve()
@@ -130,7 +175,8 @@ describe(`HTTP Sync`, () => {
     await Promise.all([promise1, promise2])
   })
 
-  it(`can go offline and then catchup`, async () => {
+  it.only(`can go offline and then catchup`, async () => {
+    const { client } = context
     const aborter = new AbortController()
     let lastLsn = 0
     const issueStream = new ShapeStream({
@@ -150,11 +196,13 @@ describe(`HTTP Sync`, () => {
       })
     })
 
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
+    await appendRow({ client, title: `foo4` })
+    await appendRow({ client, title: `foo5` })
+    await appendRow({ client, title: `foo6` })
+    await appendRow({ client, title: `foo7` })
+    await appendRow({ client, title: `foo8` })
+    // Wait for sqlite to get all the updates.
+    await new Promise((resolve) => setTimeout(resolve, 40))
 
     let catchupOpsCount = 0
     const newAborter = new AbortController()
@@ -178,7 +226,8 @@ describe(`HTTP Sync`, () => {
     expect(catchupOpsCount).toBe(5)
   })
 
-  it(`should return correct caching headers`, async () => {
+  it.only(`should return correct caching headers`, async () => {
+    const { client } = context
     const res = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
     const cacheHeaders = res.headers.get(`cache-control`)
     const directives = parse(cacheHeaders)
@@ -186,18 +235,22 @@ describe(`HTTP Sync`, () => {
     const etag = parseInt(res.headers.get(`etag`), 10)
     expect(etag).toBeTypeOf(`number`)
     expect(etag).toBeLessThan(100)
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
-    updateRow(1)
+
+    await appendRow({ client, title: `foo4` })
+    await appendRow({ client, title: `foo5` })
+    await appendRow({ client, title: `foo6` })
+    await appendRow({ client, title: `foo7` })
+    await appendRow({ client, title: `foo8` })
+    // Wait for sqlite to get all the updates.
+    await new Promise((resolve) => setTimeout(resolve, 40))
+
     const res2 = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
     const etag2 = parseInt(res2.headers.get(`etag`), 10)
     expect(etag2).toBeTypeOf(`number`)
     expect(etag).toBeLessThan(100)
   })
 
-  it(`should revalidate etags`, async () => {
+  it.only(`should revalidate etags`, async () => {
     const res = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
     const etag = res.headers.get(`etag`)
 
