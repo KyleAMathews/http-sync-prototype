@@ -8,6 +8,8 @@ import Database from "better-sqlite3"
 import { electrify } from "electric-sql/node"
 import jwt from "jsonwebtoken"
 import { v4 as uuidv4 } from "uuid"
+import pg from "pg"
+const { Client } = pg
 
 function unsignedJWT(userId, customClaims) {
   const claims = customClaims || {}
@@ -17,6 +19,15 @@ function unsignedJWT(userId, customClaims) {
 
 const fs = require(`fs`)
 const path = `./wal` // Replace with your directory path
+
+const client = new Client({
+  host: `localhost`,
+  port: 5532,
+  password: `pg_password`,
+  user: `postgres`,
+  database: `testing-instance`,
+})
+client.connect()
 
 const shapes = new Map()
 async function getShape({ db, shapeId }) {
@@ -50,7 +61,7 @@ async function getShape({ db, shapeId }) {
     shape.set(`snapshot`, snapshot)
     shape.set(`data`, data)
     const unsubscribe = liveQuery.subscribe((resultUpdate) => {
-      let lastLsn = getLastLogForShape(`issues`).lsn
+      let lastLsn = getLastLogForShape(`issues`)?.lsn || 0
       lastLsn += 1
 
       const newData = new Map()
@@ -60,6 +71,7 @@ async function getShape({ db, shapeId }) {
 
       const opsWithLSN = operations.map((op) => {
         const opWithLsn = { ...op, lsn: lastLsn }
+        lastSnapshotLSN = lastLsn
         lastLsn += 1
         return opWithLsn
       })
@@ -131,7 +143,7 @@ export function deleteDb() {
 
 const fakeDb = new Map([[1, { id: 1, title: `foo` }]])
 
-export const lastSnapshotLSN = 0
+export let lastSnapshotLSN = 0
 
 function getOpsLogLength(shapeId) {
   let opsLogLength = 0
@@ -206,14 +218,7 @@ function diffMaps(map1, map2) {
   return operations
 }
 
-function updateDbAndDiff(client, mutation) {
-  const oldDb = new Map(JSON.parse(JSON.stringify(Array.from(fakeDb))))
-  mutation()
-  const operations = diffMaps(oldDb, fakeDb)
-  return operations
-}
-
-export async function appendRow({ title, client }) {
+export async function appendRow({ title }) {
   console.log(`appending row`)
   const uuid = uuidv4()
   try {
@@ -227,35 +232,6 @@ export async function appendRow({ title, client }) {
   }
 
   return uuid
-  // get last row from ops log and then append new one
-  // to ops log and write to open connections
-  // const lastLog = getLastLogForShape(`issues`)
-  // let lastLsn = lastLog.lsn
-  // lastLsn += 1
-  // const newId = lastLog.data.id + 1
-  // const newRow = { id: newId, title: `foo${lastLsn}` }
-
-  // const newOperations = updateDbAndDiff(client, () => {
-  // fakeDb.set(newId, newRow)
-  // })
-
-  // const opsWithLSN = newOperations.map((op) => {
-  // const opWithLsn = { ...op, lsn: lastLsn }
-  // lastLsn += 1
-  // return opWithLsn
-  // })
-
-  // openConnections.forEach((res) => {
-  // res.json([opsWithLSN])
-  // })
-  // openConnections.clear()
-
-  // opsWithLSN.forEach((op) => {
-  // lmdb.putSync(`issues-log-${op.lsn}`, op)
-  // })
-
-  // const shapeId = `issues`
-  // compactSnapshot({ shapeId, operations: opsWithLSN })
 }
 
 function getLastLogForShape(shapeId = `issues`) {
@@ -272,7 +248,7 @@ function getLastLogForShape(shapeId = `issues`) {
   return lastLog
 }
 
-export async function updateRow({ id, client, title }) {
+export async function updateRow({ id, title }) {
   console.log(`updating row`, { id, title })
   try {
     await client.query(`update issues set title = $1 where id = $2`, [
@@ -331,8 +307,8 @@ export async function createServer({ schema, config }) {
     res.send(`ok`)
   })
 
-  app.post(`/shape/issues/append-row/`, (req: Request, res: Response) => {
-    appendRow()
+  app.post(`/shape/issues/append-row/`, async (req: Request, res: Response) => {
+    await appendRow({ title: Math.random() })
     res.send(`ok`)
   })
 
@@ -340,7 +316,6 @@ export async function createServer({ schema, config }) {
   app.get(`/shape/:id`, async (req: Request, res: Response) => {
     const lsn = parseInt(req.query.lsn, 10)
     const isCatchUp = `catchup` in req.query && req.query.catchup !== false
-    console.log(`server /shape:id`, { lsn })
 
     // Set caching headers.
     res.set(`Cache-Control`, `max-age=60, stale-while-revalidate=300`)
@@ -350,7 +325,12 @@ export async function createServer({ schema, config }) {
 
     const opsLogLength = getOpsLogLength(shapeId)
 
-    console.log({ opsLogLength, isCatchUp, query: req.query })
+    console.log(`server /shape:id`, {
+      lsn,
+      opsLogLength,
+      isCatchUp,
+      query: req.query,
+    })
     if (lsn === -1) {
       const shape = await getShape({ db, shapeId })
       const etag = lastSnapshotLSN

@@ -59,7 +59,7 @@ afterAll(async () => {
 })
 
 describe(`HTTP Sync`, () => {
-  it.only(`should get initial data`, async () => {
+  it(`should get initial data`, async () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({ subscribe: false })
@@ -79,8 +79,8 @@ describe(`HTTP Sync`, () => {
     expect(values).toHaveLength(1)
     expect(values[0].title).toEqual(`foo`)
   })
-  it.only(`should get initial data and then receive updates`, async () => {
-    const { rowId, client } = context
+  it(`should get initial data and then receive updates`, async () => {
+    const { rowId } = context
     const shapeData = new Map()
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
@@ -95,10 +95,10 @@ describe(`HTTP Sync`, () => {
           shapeData.set(update.data.id, update.data)
         }
         if (update.lsn === 0) {
-          updateRow({ id: rowId, client, title: `foo1` })
+          updateRow({ id: rowId, title: `foo1` })
         }
         if (update.lsn === 1) {
-          secondRowId = await appendRow({ client, title: `foo2` })
+          secondRowId = await appendRow({ title: `foo2` })
         }
 
         if (update.lsn === 2) {
@@ -115,8 +115,8 @@ describe(`HTTP Sync`, () => {
     })
     context.secondRowId = secondRowId
   })
-  it.only(`Multiple clients can get the same data`, async () => {
-    const { rowId, secondRowId, client } = context
+  it(`Multiple clients can get the same data`, async () => {
+    const { rowId, secondRowId } = context
     const shapeData1 = new Map()
     const aborter1 = new AbortController()
     const issueStream1 = new ShapeStream({
@@ -137,7 +137,7 @@ describe(`HTTP Sync`, () => {
           shapeData1.set(update.data.id, update.data)
         }
         if (update.lsn === 2 || update.lsn === 3) {
-          setTimeout(() => updateRow({ id: rowId, title: `foo3`, client }), 50)
+          setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
         }
 
         if (update.lsn === 3) {
@@ -175,8 +175,7 @@ describe(`HTTP Sync`, () => {
     await Promise.all([promise1, promise2])
   })
 
-  it.only(`can go offline and then catchup`, async () => {
-    const { client } = context
+  it(`can go offline and then catchup`, async () => {
     const aborter = new AbortController()
     let lastLsn = 0
     const issueStream = new ShapeStream({
@@ -196,11 +195,11 @@ describe(`HTTP Sync`, () => {
       })
     })
 
-    await appendRow({ client, title: `foo4` })
-    await appendRow({ client, title: `foo5` })
-    await appendRow({ client, title: `foo6` })
-    await appendRow({ client, title: `foo7` })
-    await appendRow({ client, title: `foo8` })
+    await appendRow({ title: `foo4` })
+    await appendRow({ title: `foo5` })
+    await appendRow({ title: `foo6` })
+    await appendRow({ title: `foo7` })
+    await appendRow({ title: `foo8` })
     // Wait for sqlite to get all the updates.
     await new Promise((resolve) => setTimeout(resolve, 40))
 
@@ -226,8 +225,7 @@ describe(`HTTP Sync`, () => {
     expect(catchupOpsCount).toBe(5)
   })
 
-  it.only(`should return correct caching headers`, async () => {
-    const { client } = context
+  it(`should return correct caching headers`, async () => {
     const res = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
     const cacheHeaders = res.headers.get(`cache-control`)
     const directives = parse(cacheHeaders)
@@ -236,11 +234,11 @@ describe(`HTTP Sync`, () => {
     expect(etag).toBeTypeOf(`number`)
     expect(etag).toBeLessThan(100)
 
-    await appendRow({ client, title: `foo4` })
-    await appendRow({ client, title: `foo5` })
-    await appendRow({ client, title: `foo6` })
-    await appendRow({ client, title: `foo7` })
-    await appendRow({ client, title: `foo8` })
+    await appendRow({ title: `foo4` })
+    await appendRow({ title: `foo5` })
+    await appendRow({ title: `foo6` })
+    await appendRow({ title: `foo7` })
+    await appendRow({ title: `foo8` })
     // Wait for sqlite to get all the updates.
     await new Promise((resolve) => setTimeout(resolve, 40))
 
@@ -250,7 +248,7 @@ describe(`HTTP Sync`, () => {
     expect(etag).toBeLessThan(100)
   })
 
-  it.only(`should revalidate etags`, async () => {
+  it(`should revalidate etags`, async () => {
     const res = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
     const etag = res.headers.get(`etag`)
 
@@ -274,7 +272,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up LSNs should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `http://localhost:3000/shape/issues?lsn=${etag}`,
+      `http://localhost:3000/shape/issues?lsn=${etag}&catchup`,
       {
         headers: { "if-None-Else": catchupEtag },
       }
