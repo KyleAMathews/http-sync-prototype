@@ -17,7 +17,7 @@ var ShapeStream = class {
     let pollCount = 0;
     while (!upToDate || this.options.subscribe) {
       pollCount += 1;
-      let url = `http://localhost:3000/shape/issues?lsn=${lastLSN}`;
+      let url = `http://localhost:3000/shape/${this.options.shape.table}?lsn=${lastLSN}`;
       if (pollCount === 2) {
         url += `&catchup`;
       }
@@ -25,7 +25,6 @@ var ShapeStream = class {
         lastLSN,
         upToDate,
         pollCount,
-        options: this.options.subscribe,
         url
       });
       try {
@@ -33,10 +32,10 @@ var ShapeStream = class {
           signal: this.options.signal
         }).then((response) => response.json()).then((data) => {
           data.forEach((update) => {
-            if (update.type === `data`) {
+            if (typeof update.lsn !== `undefined`) {
               lastLSN = Math.max(lastLSN, update.lsn);
             }
-            if (update.type === `up-to-date`) {
+            if (update.type === `control` && update.data === `up-to-date`) {
               upToDate = true;
             }
             this.publish(update);

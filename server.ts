@@ -30,10 +30,18 @@ const client = new Client({
 client.connect()
 
 const shapes = new Map()
+const shapesSetupPromise = new Map()
 async function getShape({ db, shapeId }) {
-  if (shapes.has(shapeId)) {
+  if (shapes.has(shapeId) && !shapesSetupPromise.has(shapeId)) {
     return shapes.get(shapeId)
+  } else if (shapesSetupPromise.has(shapeId)) {
+    return shapesSetupPromise.get(shapeId)
   } else {
+    let outsideResolve
+    const setupPromise = new Promise((resolve) => {
+      outsideResolve = resolve
+    })
+    shapesSetupPromise.set(shapeId, setupPromise)
     const shape = new Map()
     const snapshot = new Map()
     const data = new Map()
@@ -100,8 +108,10 @@ async function getShape({ db, shapeId }) {
       shape.set(`data`, newData)
     })
 
-    shape.unsubscribe = unsubscribe
+    shape.set(`unsubscribe`, unsubscribe)
 
+    outsideResolve(shape)
+    shapesSetupPromise.delete(shapeId)
     return shape
   }
 }
@@ -377,6 +387,8 @@ export async function createServer({ schema, config }) {
     } else if (req.isBrowser) {
       console.log(`live updates`, { lsn })
       function close() {
+        console.log(`closing live poll`)
+        openConnections.delete(reqId)
         res.status(204).send(`no updates`)
       }
 
@@ -395,8 +407,8 @@ export async function createServer({ schema, config }) {
       console.log(`Server running at http://localhost:${port}`)
       resolve({ express: server, electric })
     })
-    server.on(`close`, () => {
-      console.log(`Server closed.`)
+    server.on(`close`, (e) => {
+      console.log(`Server closed.`, e)
     })
 
     server.on(`error`, (err) => {

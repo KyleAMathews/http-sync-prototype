@@ -12,7 +12,9 @@ function useShape(shapeId) {
       function updateSubscribers() {
         setShapeData([...shapeMap.values()])
       }
+      console.log(`new ShapeStream`)
       const issueStream = new ShapeStream({
+        shape: {table: `issues`},
         subscribe: true,
       })
       console.log({issueStream})
@@ -25,7 +27,7 @@ function useShape(shapeId) {
             updateSubscribers()
           }
         }
-        if (update.type === `up-to-date`) {
+        if (update.type === `control` && update.data === `up-to-date`) {
           upToDate = true
           updateSubscribers()
         }
@@ -46,9 +48,9 @@ function App() {
       <div>
         <h1>useShape</h1>
         <ul>
-          {issues.map((issue) => {
+          {issues.map((issue, i) => {
             return (
-              <li>
+              <li key={i}>
                 <pre>{JSON.stringify(issue)}</pre>
               </li>
             )
