@@ -31,7 +31,6 @@ export class ShapeStream {
         lastLSN,
         upToDate,
         pollCount,
-        options: this.options.subscribe,
         url,
       })
       try {
@@ -41,10 +40,10 @@ export class ShapeStream {
           .then((response) => response.json())
           .then((data) => {
             data.forEach((update) => {
-              if (update.type === `data`) {
+              if (typeof update.lsn !== `undefined`) {
                 lastLSN = Math.max(lastLSN, update.lsn)
               }
-              if (update.type === `up-to-date`) {
+              if (update.type === `control` && update.data === `up-to-date`) {
                 upToDate = true
               }
               this.publish(update)

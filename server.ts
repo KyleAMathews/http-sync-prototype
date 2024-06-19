@@ -38,10 +38,13 @@ async function getShape({ db, shapeId }) {
     const snapshot = new Map()
     const data = new Map()
     shapes.set(shapeId, shape)
-    let lsn = 0
+    let lsn = 1
     const shapeSync = await db[shapeId].sync()
     await shapeSync.synced
     const liveQuery = await db[shapeId].liveMany()
+
+    // Add the initial start control message.
+    lmdb.putSync(`${shapeId}-log-0`, { type: `control`, data: `start`, lsn: 0 })
 
     const res = await liveQuery()
     res.result.forEach((row) => {
@@ -76,7 +79,7 @@ async function getShape({ db, shapeId }) {
         return opWithLsn
       })
       openConnections.forEach((res) => {
-        res.json([opsWithLSN])
+        res.json(opsWithLSN)
       })
       openConnections.clear()
 
@@ -222,10 +225,10 @@ export async function appendRow({ title }) {
   console.log(`appending row`)
   const uuid = uuidv4()
   try {
-    await client.query(`insert into issues(id, title) values($1, $2)`, [
-      uuid,
-      title,
-    ])
+    const result = await client.query(
+      `insert into issues(id, title) values($1, $2)`,
+      [uuid, title]
+    )
   } catch (e) {
     console.log(e)
     throw e
@@ -322,6 +325,7 @@ export async function createServer({ schema, config }) {
 
     const reqId = Math.random()
     const shapeId = req.params.id
+    const shape = await getShape({ db, shapeId })
 
     const opsLogLength = getOpsLogLength(shapeId)
 
@@ -331,8 +335,8 @@ export async function createServer({ schema, config }) {
       isCatchUp,
       query: req.query,
     })
+
     if (lsn === -1) {
-      const shape = await getShape({ db, shapeId })
       const etag = lastSnapshotLSN
       res.set(`etag`, etag)
 
@@ -341,8 +345,12 @@ export async function createServer({ schema, config }) {
       if (ifNoneElse === etag.toString()) {
         return res.status(304).end() // Not Modified
       }
+      const snapshot = [
+        { type: `control`, data: `start`, lsn: 0 },
+        ...shape.get(`snapshot`).values(),
+      ]
 
-      return res.json([...shape.get(`snapshot`).values()])
+      return res.json(snapshot)
     } else if (isCatchUp || lsn + 1 < opsLogLength) {
       console.log(`catch-up`, { lsn, opsLogLength })
       const slicedOperations = []
@@ -362,7 +370,10 @@ export async function createServer({ schema, config }) {
         return res.status(304).end() // Not Modified
       }
 
-      return res.json([...slicedOperations, { type: `up-to-date` }])
+      return res.json([
+        ...slicedOperations,
+        { type: `control`, data: `up-to-date` },
+      ])
     } else if (req.isBrowser) {
       console.log(`live updates`, { lsn })
       function close() {

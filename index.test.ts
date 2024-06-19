@@ -26,17 +26,6 @@ beforeAll(async () => {
   })
   await client.connect()
 
-  const uuid = uuidv4()
-  context.rowId = uuid
-  try {
-    await client.query(`insert into issues(id, title) values($1, $2)`, [
-      uuid,
-      `foo`,
-    ])
-  } catch (e) {
-    console.log(e)
-    throw e
-  }
   context.client = client
 
   // const config = {
@@ -59,7 +48,7 @@ afterAll(async () => {
 })
 
 describe(`HTTP Sync`, () => {
-  it(`should get initial data`, async () => {
+  it(`should work with empty shapes`, async () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({ subscribe: false })
@@ -69,7 +58,42 @@ describe(`HTTP Sync`, () => {
         if (update.type === `data`) {
           shapeData.set(update.data.id, update.data)
         }
-        if (update.type === `up-to-date`) {
+        if (update.type === `control` && update.data === `up-to-date`) {
+          return resolve()
+        }
+      })
+    })
+    const values = [...shapeData.values()]
+
+    expect(values).toHaveLength(0)
+  })
+  it(`should get initial data`, async () => {
+    const { client } = context
+    // Add an initial row.
+    const uuid = uuidv4()
+    context.rowId = uuid
+    try {
+      await client.query(`insert into issues(id, title) values($1, $2)`, [
+        uuid,
+        `foo`,
+      ])
+    } catch (e) {
+      console.log(e)
+      throw e
+    }
+    // Wait for sqlite to get all the updates.
+    await new Promise((resolve) => setTimeout(resolve, 40))
+
+    // Get initial data
+    const shapeData = new Map()
+    const issueStream = new ShapeStream({ subscribe: false })
+
+    await new Promise((resolve) => {
+      issueStream.subscribe((update) => {
+        if (update.type === `data`) {
+          shapeData.set(update.data.id, update.data)
+        }
+        if (update.type === `control` && update.data === `up-to-date`) {
           return resolve()
         }
       })
@@ -94,14 +118,14 @@ describe(`HTTP Sync`, () => {
         if (update.type === `data`) {
           shapeData.set(update.data.id, update.data)
         }
-        if (update.lsn === 0) {
+        if (update.lsn === 1) {
           updateRow({ id: rowId, title: `foo1` })
         }
-        if (update.lsn === 1) {
+        if (update.lsn === 2) {
           secondRowId = await appendRow({ title: `foo2` })
         }
 
-        if (update.lsn === 2) {
+        if (update.lsn === 3) {
           aborter.abort()
           expect(shapeData).toEqual(
             new Map([
@@ -136,11 +160,11 @@ describe(`HTTP Sync`, () => {
         if (update.type === `data`) {
           shapeData1.set(update.data.id, update.data)
         }
-        if (update.lsn === 2 || update.lsn === 3) {
+        if (update.lsn === 3) {
           setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
         }
 
-        if (update.lsn === 3) {
+        if (update.lsn === 4) {
           aborter1.abort()
           expect(shapeData1).toEqual(
             new Map([
@@ -159,7 +183,7 @@ describe(`HTTP Sync`, () => {
           shapeData2.set(update.data.id, update.data)
         }
 
-        if (update.lsn === 3) {
+        if (update.lsn === 4) {
           aborter2.abort()
           expect(shapeData2).toEqual(
             new Map([
@@ -188,18 +212,18 @@ describe(`HTTP Sync`, () => {
           lastLsn = Math.max(lastLsn, update.lsn)
         }
 
-        if (update.type === `up-to-date`) {
+        if (update.type === `control` && update.data === `up-to-date`) {
           aborter.abort()
           resolve()
         }
       })
     })
 
-    await appendRow({ title: `foo4` })
     await appendRow({ title: `foo5` })
     await appendRow({ title: `foo6` })
     await appendRow({ title: `foo7` })
     await appendRow({ title: `foo8` })
+    await appendRow({ title: `foo9` })
     // Wait for sqlite to get all the updates.
     await new Promise((resolve) => setTimeout(resolve, 40))
 
@@ -215,7 +239,7 @@ describe(`HTTP Sync`, () => {
         if (update.type === `data`) {
           catchupOpsCount += 1
         }
-        if (update.type === `up-to-date`) {
+        if (update.type === `control` && update.data === `up-to-date`) {
           newAborter.abort()
           resolve()
         }
