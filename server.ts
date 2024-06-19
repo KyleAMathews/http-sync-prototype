@@ -64,7 +64,7 @@ async function getShape({ db, shapeId }) {
     shape.set(`snapshot`, snapshot)
     shape.set(`data`, data)
     const unsubscribe = liveQuery.subscribe((resultUpdate) => {
-      let lastLsn = getLastLogForShape(`issues`)?.lsn || 0
+      let lastLsn = getLastLogForShape(shapeId)?.lsn || 0
       lastLsn += 1
 
       const newData = new Map()
@@ -84,7 +84,7 @@ async function getShape({ db, shapeId }) {
       openConnections.clear()
 
       opsWithLSN.forEach((op) => {
-        lmdb.putSync(`issues-log-${op.lsn}`, op)
+        lmdb.putSync(`${shapeId}-log-${op.lsn}`, op)
       })
 
       opsWithLSN.forEach((op) => {
@@ -174,7 +174,7 @@ function getSnapshotInfo(shapeId) {
   return { snapshotSize, latestSnapshotLSN }
 }
 
-function compactSnapshot({ shapeId = `issues`, operations }) {
+function compactSnapshot({ shapeId, operations }) {
   operations.forEach((op) => {
     if (op.type === `data`) {
       lmdb.put(`${shapeId}-snapshot-${op.data.id}`, op)
@@ -237,7 +237,7 @@ export async function appendRow({ title }) {
   return uuid
 }
 
-function getLastLogForShape(shapeId = `issues`) {
+function getLastLogForShape(shapeId: string) {
   let lastLog
   for (const { key, value } of lmdb.getRange({
     start: `${shapeId}-log-${MAX_VALUE}`,

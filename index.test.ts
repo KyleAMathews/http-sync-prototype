@@ -25,6 +25,18 @@ beforeAll(async () => {
     database: `testing-instance`,
   })
   await client.connect()
+  //
+  // Add an initial row.
+  const uuid = uuidv4()
+  try {
+    await client.query(`insert into foo(id, title) values($1, $2)`, [
+      uuid,
+      `I AM FOO TABLE`,
+    ])
+  } catch (e) {
+    console.log(e)
+    throw e
+  }
 
   context.client = client
 
@@ -43,6 +55,7 @@ afterAll(async () => {
   context.server.electric.disconnect()
   deleteDb()
   await context.client.query(`TRUNCATE TABLE issues`)
+  await context.client.query(`TRUNCATE TABLE foo`)
   await context.client.end()
   context = {}
 })
@@ -51,7 +64,10 @@ describe(`HTTP Sync`, () => {
   it(`should work with empty shapes`, async () => {
     // Get initial data
     const shapeData = new Map()
-    const issueStream = new ShapeStream({ subscribe: false })
+    const issueStream = new ShapeStream({
+      shape: { table: `issues` },
+      subscribe: false,
+    })
 
     await new Promise((resolve) => {
       issueStream.subscribe((update) => {
@@ -86,7 +102,10 @@ describe(`HTTP Sync`, () => {
 
     // Get initial data
     const shapeData = new Map()
-    const issueStream = new ShapeStream({ subscribe: false })
+    const issueStream = new ShapeStream({
+      shape: { table: `issues` },
+      subscribe: false,
+    })
 
     await new Promise((resolve) => {
       issueStream.subscribe((update) => {
@@ -103,11 +122,37 @@ describe(`HTTP Sync`, () => {
     expect(values).toHaveLength(1)
     expect(values[0].title).toEqual(`foo`)
   })
+  it(`should get initial data for a second table`, async () => {
+    const { client } = context
+
+    // Get initial data
+    const shapeData = new Map()
+    const fooStream = new ShapeStream({
+      shape: { table: `foo` },
+      subscribe: false,
+    })
+
+    await new Promise((resolve) => {
+      fooStream.subscribe((update) => {
+        if (update.type === `data`) {
+          shapeData.set(update.data.id, update.data)
+        }
+        if (update.type === `control` && update.data === `up-to-date`) {
+          return resolve()
+        }
+      })
+    })
+    const values = [...shapeData.values()]
+
+    expect(values).toHaveLength(1)
+    expect(values[0].title).toEqual(`I AM FOO TABLE`)
+  })
   it(`should get initial data and then receive updates`, async () => {
     const { rowId } = context
     const shapeData = new Map()
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
+      shape: { table: `issues` },
       subscribe: true,
       signal: aborter.signal,
     })
@@ -144,6 +189,7 @@ describe(`HTTP Sync`, () => {
     const shapeData1 = new Map()
     const aborter1 = new AbortController()
     const issueStream1 = new ShapeStream({
+      shape: { table: `issues` },
       subscribe: true,
       signal: aborter1.signal,
     })
@@ -151,6 +197,7 @@ describe(`HTTP Sync`, () => {
     const shapeData2 = new Map()
     const aborter2 = new AbortController()
     const issueStream2 = new ShapeStream({
+      shape: { table: `issues` },
       subscribe: true,
       signal: aborter2.signal,
     })
@@ -203,6 +250,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     let lastLsn = 0
     const issueStream = new ShapeStream({
+      shape: { table: `issues` },
       subscribe: false,
       signal: aborter.signal,
     })
@@ -230,6 +278,7 @@ describe(`HTTP Sync`, () => {
     let catchupOpsCount = 0
     const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
+      shape: { table: `issues` },
       subscribe: true,
       signal: newAborter.signal,
       lsn: lastLsn,

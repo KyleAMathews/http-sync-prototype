@@ -23,7 +23,7 @@ export class ShapeStream {
     // fetch loop.
     while (!upToDate || this.options.subscribe) {
       pollCount += 1
-      let url = `http://localhost:3000/shape/issues?lsn=${lastLSN}`
+      let url = `http://localhost:3000/shape/${this.options.shape.table}?lsn=${lastLSN}`
       if (pollCount === 2) {
         url += `&catchup`
       }

@@ -13,6 +13,18 @@ type UnwrapTuple<Tuple extends readonly unknown[]> = {
 
 
 /**
+ * Model Foo
+ * 
+ */
+export type Foo = {
+  /**
+   * @zod.string.uuid()
+   */
+  id: string
+  title: string
+}
+
+/**
  * Model Issues
  * 
  */
@@ -32,8 +44,8 @@ export type Issues = {
  * @example
  * ```
  * const prisma = new PrismaClient()
- * // Fetch zero or more Issues
- * const issues = await prisma.issues.findMany()
+ * // Fetch zero or more Foos
+ * const foos = await prisma.foo.findMany()
  * ```
  *
  * 
@@ -53,8 +65,8 @@ export class PrismaClient<
    * @example
    * ```
    * const prisma = new PrismaClient()
-   * // Fetch zero or more Issues
-   * const issues = await prisma.issues.findMany()
+   * // Fetch zero or more Foos
+   * const foos = await prisma.foo.findMany()
    * ```
    *
    * 
@@ -143,6 +155,16 @@ export class PrismaClient<
   $transaction<R>(fn: (prisma: Prisma.TransactionClient) => Promise<R>, options?: {maxWait?: number, timeout?: number, isolationLevel?: Prisma.TransactionIsolationLevel}): Promise<R>;
 
       /**
+   * `prisma.foo`: Exposes CRUD operations for the **Foo** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Foos
+    * const foos = await prisma.foo.findMany()
+    * ```
+    */
+  get foo(): Prisma.FooDelegate<GlobalReject>;
+
+  /**
    * `prisma.issues`: Exposes CRUD operations for the **Issues** model.
     * Example usage:
     * ```ts
@@ -635,6 +657,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
   }
 
   export const ModelName: {
+    Foo: 'Foo',
     Issues: 'Issues'
   };
 
@@ -804,6 +827,911 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
   /**
    * Models
    */
+
+  /**
+   * Model Foo
+   */
+
+
+  export type AggregateFoo = {
+    _count: FooCountAggregateOutputType | null
+    _min: FooMinAggregateOutputType | null
+    _max: FooMaxAggregateOutputType | null
+  }
+
+  export type FooMinAggregateOutputType = {
+    id: string | null
+    title: string | null
+  }
+
+  export type FooMaxAggregateOutputType = {
+    id: string | null
+    title: string | null
+  }
+
+  export type FooCountAggregateOutputType = {
+    id: number
+    title: number
+    _all: number
+  }
+
+
+  export type FooMinAggregateInputType = {
+    id?: true
+    title?: true
+  }
+
+  export type FooMaxAggregateInputType = {
+    id?: true
+    title?: true
+  }
+
+  export type FooCountAggregateInputType = {
+    id?: true
+    title?: true
+    _all?: true
+  }
+
+  export type FooAggregateArgs = {
+    /**
+     * Filter which Foo to aggregate.
+     * 
+    **/
+    where?: FooWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Foos to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<FooOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     * 
+    **/
+    cursor?: FooWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Foos from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Foos.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned Foos
+    **/
+    _count?: true | FooCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: FooMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: FooMaxAggregateInputType
+  }
+
+  export type GetFooAggregateType<T extends FooAggregateArgs> = {
+        [P in keyof T & keyof AggregateFoo]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateFoo[P]>
+      : GetScalarType<T[P], AggregateFoo[P]>
+  }
+
+
+
+
+  export type FooGroupByArgs = {
+    where?: FooWhereInput
+    orderBy?: Enumerable<FooOrderByWithAggregationInput>
+    by: Array<FooScalarFieldEnum>
+    having?: FooScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: FooCountAggregateInputType | true
+    _min?: FooMinAggregateInputType
+    _max?: FooMaxAggregateInputType
+  }
+
+
+  export type FooGroupByOutputType = {
+    id: string
+    title: string
+    _count: FooCountAggregateOutputType | null
+    _min: FooMinAggregateOutputType | null
+    _max: FooMaxAggregateOutputType | null
+  }
+
+  type GetFooGroupByPayload<T extends FooGroupByArgs> = PrismaPromise<
+    Array<
+      PickArray<FooGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof FooGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], FooGroupByOutputType[P]>
+            : GetScalarType<T[P], FooGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type FooSelect = {
+    id?: boolean
+    title?: boolean
+  }
+
+
+  export type FooGetPayload<S extends boolean | null | undefined | FooArgs> =
+    S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
+    S extends true ? Foo :
+    S extends undefined ? never :
+    S extends { include: any } & (FooArgs | FooFindManyArgs)
+    ? Foo 
+    : S extends { select: any } & (FooArgs | FooFindManyArgs)
+      ? {
+    [P in TruthyKeys<S['select']>]:
+    P extends keyof Foo ? Foo[P] : never
+  } 
+      : Foo
+
+
+  type FooCountArgs = Merge<
+    Omit<FooFindManyArgs, 'select' | 'include'> & {
+      select?: FooCountAggregateInputType | true
+    }
+  >
+
+  export interface FooDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+    /**
+     * Find zero or one Foo that matches the filter.
+     * @param {FooFindUniqueArgs} args - Arguments to find a Foo
+     * @example
+     * // Get one Foo
+     * const foo = await prisma.foo.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findUnique<T extends FooFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, FooFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Foo'> extends True ? Prisma__FooClient<FooGetPayload<T>> : Prisma__FooClient<FooGetPayload<T> | null, null>
+
+    /**
+     * Find one Foo that matches the filter or throw an error  with `error.code='P2025'` 
+     *     if no matches were found.
+     * @param {FooFindUniqueOrThrowArgs} args - Arguments to find a Foo
+     * @example
+     * // Get one Foo
+     * const foo = await prisma.foo.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findUniqueOrThrow<T extends FooFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, FooFindUniqueOrThrowArgs>
+    ): Prisma__FooClient<FooGetPayload<T>>
+
+    /**
+     * Find the first Foo that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {FooFindFirstArgs} args - Arguments to find a Foo
+     * @example
+     * // Get one Foo
+     * const foo = await prisma.foo.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findFirst<T extends FooFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, FooFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Foo'> extends True ? Prisma__FooClient<FooGetPayload<T>> : Prisma__FooClient<FooGetPayload<T> | null, null>
+
+    /**
+     * Find the first Foo that matches the filter or
+     * throw `NotFoundError` if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {FooFindFirstOrThrowArgs} args - Arguments to find a Foo
+     * @example
+     * // Get one Foo
+     * const foo = await prisma.foo.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findFirstOrThrow<T extends FooFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, FooFindFirstOrThrowArgs>
+    ): Prisma__FooClient<FooGetPayload<T>>
+
+    /**
+     * Find zero or more Foos that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {FooFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all Foos
+     * const foos = await prisma.foo.findMany()
+     * 
+     * // Get first 10 Foos
+     * const foos = await prisma.foo.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const fooWithIdOnly = await prisma.foo.findMany({ select: { id: true } })
+     * 
+    **/
+    findMany<T extends FooFindManyArgs>(
+      args?: SelectSubset<T, FooFindManyArgs>
+    ): PrismaPromise<Array<FooGetPayload<T>>>
+
+    /**
+     * Create a Foo.
+     * @param {FooCreateArgs} args - Arguments to create a Foo.
+     * @example
+     * // Create one Foo
+     * const Foo = await prisma.foo.create({
+     *   data: {
+     *     // ... data to create a Foo
+     *   }
+     * })
+     * 
+    **/
+    create<T extends FooCreateArgs>(
+      args: SelectSubset<T, FooCreateArgs>
+    ): Prisma__FooClient<FooGetPayload<T>>
+
+    /**
+     * Create many Foos.
+     *     @param {FooCreateManyArgs} args - Arguments to create many Foos.
+     *     @example
+     *     // Create many Foos
+     *     const foo = await prisma.foo.createMany({
+     *       data: {
+     *         // ... provide data here
+     *       }
+     *     })
+     *     
+    **/
+    createMany<T extends FooCreateManyArgs>(
+      args?: SelectSubset<T, FooCreateManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Delete a Foo.
+     * @param {FooDeleteArgs} args - Arguments to delete one Foo.
+     * @example
+     * // Delete one Foo
+     * const Foo = await prisma.foo.delete({
+     *   where: {
+     *     // ... filter to delete one Foo
+     *   }
+     * })
+     * 
+    **/
+    delete<T extends FooDeleteArgs>(
+      args: SelectSubset<T, FooDeleteArgs>
+    ): Prisma__FooClient<FooGetPayload<T>>
+
+    /**
+     * Update one Foo.
+     * @param {FooUpdateArgs} args - Arguments to update one Foo.
+     * @example
+     * // Update one Foo
+     * const foo = await prisma.foo.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+    **/
+    update<T extends FooUpdateArgs>(
+      args: SelectSubset<T, FooUpdateArgs>
+    ): Prisma__FooClient<FooGetPayload<T>>
+
+    /**
+     * Delete zero or more Foos.
+     * @param {FooDeleteManyArgs} args - Arguments to filter Foos to delete.
+     * @example
+     * // Delete a few Foos
+     * const { count } = await prisma.foo.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+    **/
+    deleteMany<T extends FooDeleteManyArgs>(
+      args?: SelectSubset<T, FooDeleteManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Foos.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {FooUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many Foos
+     * const foo = await prisma.foo.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+    **/
+    updateMany<T extends FooUpdateManyArgs>(
+      args: SelectSubset<T, FooUpdateManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one Foo.
+     * @param {FooUpsertArgs} args - Arguments to update or create a Foo.
+     * @example
+     * // Update or create a Foo
+     * const foo = await prisma.foo.upsert({
+     *   create: {
+     *     // ... data to create a Foo
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the Foo we want to update
+     *   }
+     * })
+    **/
+    upsert<T extends FooUpsertArgs>(
+      args: SelectSubset<T, FooUpsertArgs>
+    ): Prisma__FooClient<FooGetPayload<T>>
+
+    /**
+     * Count the number of Foos.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {FooCountArgs} args - Arguments to filter Foos to count.
+     * @example
+     * // Count the number of Foos
+     * const count = await prisma.foo.count({
+     *   where: {
+     *     // ... the filter for the Foos we want to count
+     *   }
+     * })
+    **/
+    count<T extends FooCountArgs>(
+      args?: Subset<T, FooCountArgs>,
+    ): PrismaPromise<
+      T extends _Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], FooCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a Foo.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {FooAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends FooAggregateArgs>(args: Subset<T, FooAggregateArgs>): PrismaPromise<GetFooAggregateType<T>>
+
+    /**
+     * Group by Foo.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {FooGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends FooGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: FooGroupByArgs['orderBy'] }
+        : { orderBy?: FooGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends TupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, FooGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetFooGroupByPayload<T> : PrismaPromise<InputErrors>
+
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for Foo.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export class Prisma__FooClient<T, Null = never> implements PrismaPromise<T> {
+    [prisma]: true;
+    private readonly _dmmf;
+    private readonly _fetcher;
+    private readonly _queryType;
+    private readonly _rootField;
+    private readonly _clientMethod;
+    private readonly _args;
+    private readonly _dataPath;
+    private readonly _errorFormat;
+    private readonly _measurePerformance?;
+    private _isList;
+    private _callsite;
+    private _requestPromise?;
+    constructor(_dmmf: runtime.DMMFClass, _fetcher: PrismaClientFetcher, _queryType: 'query' | 'mutation', _rootField: string, _clientMethod: string, _args: any, _dataPath: string[], _errorFormat: ErrorFormat, _measurePerformance?: boolean | undefined, _isList?: boolean);
+    readonly [Symbol.toStringTag]: 'PrismaClientPromise';
+
+
+    private get _document();
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): Promise<TResult1 | TResult2>;
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): Promise<T | TResult>;
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): Promise<T>;
+  }
+
+
+
+  // Custom InputTypes
+
+  /**
+   * Foo base type for findUnique actions
+   */
+  export type FooFindUniqueArgsBase = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * Filter, which Foo to fetch.
+     * 
+    **/
+    where: FooWhereUniqueInput
+  }
+
+  /**
+   * Foo findUnique
+   */
+  export interface FooFindUniqueArgs extends FooFindUniqueArgsBase {
+   /**
+    * Throw an Error if query returns no results
+    * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
+    */
+    rejectOnNotFound?: RejectOnNotFound
+  }
+      
+
+  /**
+   * Foo findUniqueOrThrow
+   */
+  export type FooFindUniqueOrThrowArgs = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * Filter, which Foo to fetch.
+     * 
+    **/
+    where: FooWhereUniqueInput
+  }
+
+
+  /**
+   * Foo base type for findFirst actions
+   */
+  export type FooFindFirstArgsBase = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * Filter, which Foo to fetch.
+     * 
+    **/
+    where?: FooWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Foos to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<FooOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for Foos.
+     * 
+    **/
+    cursor?: FooWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Foos from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Foos.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of Foos.
+     * 
+    **/
+    distinct?: Enumerable<FooScalarFieldEnum>
+  }
+
+  /**
+   * Foo findFirst
+   */
+  export interface FooFindFirstArgs extends FooFindFirstArgsBase {
+   /**
+    * Throw an Error if query returns no results
+    * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
+    */
+    rejectOnNotFound?: RejectOnNotFound
+  }
+      
+
+  /**
+   * Foo findFirstOrThrow
+   */
+  export type FooFindFirstOrThrowArgs = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * Filter, which Foo to fetch.
+     * 
+    **/
+    where?: FooWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Foos to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<FooOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for Foos.
+     * 
+    **/
+    cursor?: FooWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Foos from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Foos.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of Foos.
+     * 
+    **/
+    distinct?: Enumerable<FooScalarFieldEnum>
+  }
+
+
+  /**
+   * Foo findMany
+   */
+  export type FooFindManyArgs = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * Filter, which Foos to fetch.
+     * 
+    **/
+    where?: FooWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Foos to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<FooOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing Foos.
+     * 
+    **/
+    cursor?: FooWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Foos from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Foos.
+     * 
+    **/
+    skip?: number
+    distinct?: Enumerable<FooScalarFieldEnum>
+  }
+
+
+  /**
+   * Foo create
+   */
+  export type FooCreateArgs = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * The data needed to create a Foo.
+     * 
+    **/
+    data: XOR<FooCreateInput, FooUncheckedCreateInput>
+  }
+
+
+  /**
+   * Foo createMany
+   */
+  export type FooCreateManyArgs = {
+    /**
+     * The data used to create many Foos.
+     * 
+    **/
+    data: Enumerable<FooCreateManyInput>
+    skipDuplicates?: boolean
+  }
+
+
+  /**
+   * Foo update
+   */
+  export type FooUpdateArgs = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * The data needed to update a Foo.
+     * 
+    **/
+    data: XOR<FooUpdateInput, FooUncheckedUpdateInput>
+    /**
+     * Choose, which Foo to update.
+     * 
+    **/
+    where: FooWhereUniqueInput
+  }
+
+
+  /**
+   * Foo updateMany
+   */
+  export type FooUpdateManyArgs = {
+    /**
+     * The data used to update Foos.
+     * 
+    **/
+    data: XOR<FooUpdateManyMutationInput, FooUncheckedUpdateManyInput>
+    /**
+     * Filter which Foos to update
+     * 
+    **/
+    where?: FooWhereInput
+  }
+
+
+  /**
+   * Foo upsert
+   */
+  export type FooUpsertArgs = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * The filter to search for the Foo to update in case it exists.
+     * 
+    **/
+    where: FooWhereUniqueInput
+    /**
+     * In case the Foo found by the `where` argument doesn't exist, create a new Foo with this data.
+     * 
+    **/
+    create: XOR<FooCreateInput, FooUncheckedCreateInput>
+    /**
+     * In case the Foo was found with the provided `where` argument, update it with this data.
+     * 
+    **/
+    update: XOR<FooUpdateInput, FooUncheckedUpdateInput>
+  }
+
+
+  /**
+   * Foo delete
+   */
+  export type FooDeleteArgs = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+    /**
+     * Filter which Foo to delete.
+     * 
+    **/
+    where: FooWhereUniqueInput
+  }
+
+
+  /**
+   * Foo deleteMany
+   */
+  export type FooDeleteManyArgs = {
+    /**
+     * Filter which Foos to delete
+     * 
+    **/
+    where?: FooWhereInput
+  }
+
+
+  /**
+   * Foo without action
+   */
+  export type FooArgs = {
+    /**
+     * Select specific fields to fetch from the Foo
+     * 
+    **/
+    select?: FooSelect | null
+  }
+
+
 
   /**
    * Model Issues
@@ -1717,6 +2645,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
   // Based on
   // https://github.com/microsoft/TypeScript/issues/3192#issuecomment-261720275
 
+  export const FooScalarFieldEnum: {
+    id: 'id',
+    title: 'title'
+  };
+
+  export type FooScalarFieldEnum = (typeof FooScalarFieldEnum)[keyof typeof FooScalarFieldEnum]
+
+
   export const IssuesScalarFieldEnum: {
     id: 'id',
     title: 'title'
@@ -1756,6 +2692,39 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
    */
 
 
+  export type FooWhereInput = {
+    AND?: Enumerable<FooWhereInput>
+    OR?: Enumerable<FooWhereInput>
+    NOT?: Enumerable<FooWhereInput>
+    id?: UuidFilter | string
+    title?: StringFilter | string
+  }
+
+  export type FooOrderByWithRelationInput = {
+    id?: SortOrder
+    title?: SortOrder
+  }
+
+  export type FooWhereUniqueInput = {
+    id?: string
+  }
+
+  export type FooOrderByWithAggregationInput = {
+    id?: SortOrder
+    title?: SortOrder
+    _count?: FooCountOrderByAggregateInput
+    _max?: FooMaxOrderByAggregateInput
+    _min?: FooMinOrderByAggregateInput
+  }
+
+  export type FooScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<FooScalarWhereWithAggregatesInput>
+    OR?: Enumerable<FooScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<FooScalarWhereWithAggregatesInput>
+    id?: UuidWithAggregatesFilter | string
+    title?: StringWithAggregatesFilter | string
+  }
+
   export type IssuesWhereInput = {
     AND?: Enumerable<IssuesWhereInput>
     OR?: Enumerable<IssuesWhereInput>
@@ -1787,6 +2756,41 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     NOT?: Enumerable<IssuesScalarWhereWithAggregatesInput>
     id?: UuidWithAggregatesFilter | string
     title?: StringWithAggregatesFilter | string
+  }
+
+  export type FooCreateInput = {
+    id: string
+    title: string
+  }
+
+  export type FooUncheckedCreateInput = {
+    id: string
+    title: string
+  }
+
+  export type FooUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    title?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type FooUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    title?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type FooCreateManyInput = {
+    id: string
+    title: string
+  }
+
+  export type FooUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    title?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type FooUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    title?: StringFieldUpdateOperationsInput | string
   }
 
   export type IssuesCreateInput = {
@@ -1851,17 +2855,17 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     not?: NestedStringFilter | string
   }
 
-  export type IssuesCountOrderByAggregateInput = {
+  export type FooCountOrderByAggregateInput = {
     id?: SortOrder
     title?: SortOrder
   }
 
-  export type IssuesMaxOrderByAggregateInput = {
+  export type FooMaxOrderByAggregateInput = {
     id?: SortOrder
     title?: SortOrder
   }
 
-  export type IssuesMinOrderByAggregateInput = {
+  export type FooMinOrderByAggregateInput = {
     id?: SortOrder
     title?: SortOrder
   }
@@ -1897,6 +2901,21 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     _count?: NestedIntFilter
     _min?: NestedStringFilter
     _max?: NestedStringFilter
+  }
+
+  export type IssuesCountOrderByAggregateInput = {
+    id?: SortOrder
+    title?: SortOrder
+  }
+
+  export type IssuesMaxOrderByAggregateInput = {
+    id?: SortOrder
+    title?: SortOrder
+  }
+
+  export type IssuesMinOrderByAggregateInput = {
+    id?: SortOrder
+    title?: SortOrder
   }
 
   export type StringFieldUpdateOperationsInput = {
