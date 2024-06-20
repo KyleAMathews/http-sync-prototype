@@ -272,8 +272,12 @@ describe(`HTTP Sync`, () => {
     await appendRow({ title: `foo7` })
     await appendRow({ title: `foo8` })
     await appendRow({ title: `foo9` })
+    await appendRow({ title: `foo10` })
+    await appendRow({ title: `foo11` })
+    await appendRow({ title: `foo12` })
+    await appendRow({ title: `foo13` })
     // Wait for sqlite to get all the updates.
-    await new Promise((resolve) => setTimeout(resolve, 40))
+    await new Promise((resolve) => setTimeout(resolve, 60))
 
     let catchupOpsCount = 0
     const newAborter = new AbortController()
@@ -295,7 +299,7 @@ describe(`HTTP Sync`, () => {
       })
     })
 
-    expect(catchupOpsCount).toBe(5)
+    expect(catchupOpsCount).toBe(9)
   })
 
   it(`should return correct caching headers`, async () => {

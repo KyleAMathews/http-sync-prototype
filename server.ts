@@ -46,16 +46,17 @@ async function getShape({ db, shapeId }) {
     const snapshot = new Map()
     const data = new Map()
     shapes.set(shapeId, shape)
-    let lsn = 1
     const shapeSync = await db[shapeId].sync()
     await shapeSync.synced
     const liveQuery = await db[shapeId].liveMany()
 
+    let lsn = 0
     // Add the initial start control message.
-    lmdb.putSync(`${shapeId}-log-0`, { type: `control`, data: `start`, lsn: 0 })
+    lmdb.putSync(`${shapeId}-log-0`, { type: `control`, data: `start`, lsn })
 
     const res = await liveQuery()
     res.result.forEach((row) => {
+      lsn += 1
       const log = {
         type: `data`,
         lsn,
@@ -66,14 +67,16 @@ async function getShape({ db, shapeId }) {
       lmdb.putSync(`${shapeId}-snapshot-${row.id}`, log)
       lmdb.putSync(`${shapeId}-snapshotHighLsn`, lsn)
       lmdb.putSync(`${shapeId}-log-${lsn}`, log)
-      lsn += 1
     })
+    shape.set(`lastLsn`, lsn)
     lmdb.putSync(`${shapeId}-has-snapshot`, true)
     shape.set(`snapshot`, snapshot)
     shape.set(`data`, data)
+
+    // We're finished with the initial setup of the shape, now we'll listen
+    // for updates.
     const unsubscribe = liveQuery.subscribe((resultUpdate) => {
-      let lastLsn = getLastLogForShape(shapeId)?.lsn || 0
-      lastLsn += 1
+      let lastLsn = shape.get(`lastLsn`)
 
       const newData = new Map()
       resultUpdate.results.forEach((row) => newData.set(row.id, row))
@@ -81,9 +84,10 @@ async function getShape({ db, shapeId }) {
       const operations = diffMaps(shape.get(`data`), newData)
 
       const opsWithLSN = operations.map((op) => {
+        lastLsn += 1
+        shape.set(`lastLsn`, lastLsn)
         const opWithLsn = { ...op, lsn: lastLsn }
         lastSnapshotLSN = lastLsn
-        lastLsn += 1
         return opWithLsn
       })
       openConnections.forEach((res) => {
@@ -247,20 +251,6 @@ export async function appendRow({ title }) {
   return uuid
 }
 
-function getLastLogForShape(shapeId: string) {
-  let lastLog
-  for (const { key, value } of lmdb.getRange({
-    start: `${shapeId}-log-${MAX_VALUE}`,
-    end: `${shapeId}-log-`,
-    limit: 1,
-    reverse: true,
-  })) {
-    lastLog = value
-  }
-
-  return lastLog
-}
-
 export async function updateRow({ id, title }) {
   console.log(`updating row`, { id, title })
   try {
@@ -273,7 +263,11 @@ export async function updateRow({ id, title }) {
   }
 }
 
-export async function createServer({ schema, config }) {
+export async function createServer({
+  schema,
+  config,
+  addRoutes = (app) => {},
+}) {
   console.log(`inside createServer`)
   const runId = Math.random()
   const conn = new Database(`test-dbs/${runId}.db`)
@@ -287,7 +281,7 @@ export async function createServer({ schema, config }) {
   // Enable CORS for all routes
   app.use(cors())
 
-  app.use(bodyParser.json())
+  app.use(express.json())
   // Middleware to check if request is from a browser
   const isBrowserRequest = (req, res, next) => {
     const userAgent = req.headers[`user-agent`]
@@ -324,6 +318,9 @@ export async function createServer({ schema, config }) {
     await appendRow({ title: Math.random() })
     res.send(`ok`)
   })
+
+  // Allow server to add their own routes
+  addRoutes(app)
 
   // Endpoint to get initial data and subscribe to updates
   app.get(`/shape/:id`, async (req: Request, res: Response) => {
@@ -364,7 +361,7 @@ export async function createServer({ schema, config }) {
     } else if (isCatchUp || lsn + 1 < opsLogLength) {
       console.log(`catch-up`, { lsn, opsLogLength })
       const slicedOperations = []
-      const etag = getLastLogForShape(shapeId).lsn
+      const etag = shape.get(`lastLsn`)
       for (const { value } of lmdb.getRange({
         start: `${shapeId}-log-`,
         end: `${shapeId}-log-${MAX_VALUE}`,
