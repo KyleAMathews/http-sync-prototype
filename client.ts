@@ -3,6 +3,7 @@ import { Message } from "./types"
 
 export class ShapeStream {
   private subscribers: ((message: Message) => void)[] = []
+  private batchSubscribers: ((messages: Message[]) => void)[] = []
 
   constructor(options = { subscribe: true }) {
     this.instanceId = Math.random()
@@ -57,6 +58,7 @@ export class ShapeStream {
             return response.json()
           })
           .then((data: Message[]) => {
+            this.publishBatch(data)
             data.forEach((message) => {
               if (typeof message.lsn !== `undefined`) {
                 lastLSN = Math.max(lastLSN, message.lsn)
@@ -105,6 +107,16 @@ export class ShapeStream {
   publish(message: Message) {
     for (const subscriber of this.subscribers) {
       subscriber(message)
+    }
+  }
+
+  subscribeBatch(callback: (messages: Message[]) => void) {
+    this.batchSubscribers.push(callback)
+  }
+
+  publishBatch(messages: Message[]) {
+    for (const subscriber of this.batchSubscribers) {
+      subscriber(messages)
     }
   }
 }
