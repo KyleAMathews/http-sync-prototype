@@ -21,8 +21,17 @@ export class ShapeStream {
     let upToDate = false
     let pollCount = 0
 
+    // Variables for exponential backoff
+    let attempt = 0
+    const maxDelay = 10000 // 10 seconds in milliseconds
+    const initialDelay = 100 // 100 milliseconds
+    let delay = initialDelay
+
     // fetch loop.
-    while (!upToDate || this.options.subscribe) {
+    while (
+      !this.options.signal?.aborted &&
+      (!upToDate || this.options.subscribe)
+    ) {
       pollCount += 1
       let url = `http://localhost:3000/shape/${this.options.shape.table}?lsn=${lastLSN}`
       if (pollCount === 2) {
@@ -38,9 +47,15 @@ export class ShapeStream {
       })
       try {
         await fetch(url, {
-          signal: this.options.signal,
+          signal: this.options.signal ? this.options.signal : undefined,
         })
-          .then((response) => response.json())
+          .then(async (response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`)
+            }
+            attempt = 0
+            return response.json()
+          })
           .then((data: Message[]) => {
             data.forEach((message) => {
               if (typeof message.lsn !== `undefined`) {
@@ -54,16 +69,28 @@ export class ShapeStream {
               ) {
                 upToDate = true
               }
-              this.publish(message)
+              if (!this.options.signal?.aborted) {
+                this.publish(message)
+              }
             })
           })
       } catch (e) {
         if (e.message !== `This operation was aborted`) {
           console.log(`fetch failed`, e)
-          throw e
-        }
+          // Exponentially backoff on errors.
 
-        break
+          // Wait for the current delay duration
+          await new Promise((resolve) => setTimeout(resolve, delay))
+
+          // Increase the delay for the next attempt
+          delay = Math.min(delay * 1.3, maxDelay)
+
+          attempt++
+          console.log(`Retry attempt #${attempt} after ${delay}ms`)
+        } else {
+          // Break out of while loop when the user aborts the client.
+          break
+        }
       }
     }
 

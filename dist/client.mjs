@@ -12,10 +12,15 @@ var ShapeStream = class {
     });
   }
   async startStream() {
+    var _a;
     let lastLSN = this.options.lsn || -1;
     let upToDate = false;
     let pollCount = 0;
-    while (!upToDate || this.options.subscribe) {
+    let attempt = 0;
+    const maxDelay = 1e4;
+    const initialDelay = 100;
+    let delay = initialDelay;
+    while (!((_a = this.options.signal) == null ? void 0 : _a.aborted) && (!upToDate || this.options.subscribe)) {
       pollCount += 1;
       let url = `http://localhost:3000/shape/${this.options.shape.table}?lsn=${lastLSN}`;
       if (pollCount === 2) {
@@ -31,27 +36,39 @@ var ShapeStream = class {
       });
       try {
         await fetch(url, {
-          signal: this.options.signal
-        }).then((response) => response.json()).then((data) => {
+          signal: this.options.signal ? this.options.signal : void 0
+        }).then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          attempt = 0;
+          return response.json();
+        }).then((data) => {
           data.forEach((message) => {
-            var _a;
+            var _a2, _b;
             if (typeof message.lsn !== `undefined`) {
               lastLSN = Math.max(lastLSN, message.lsn);
             }
-            if ((_a = message.headers) == null ? void 0 : _a.some(
+            if ((_a2 = message.headers) == null ? void 0 : _a2.some(
               ({ key, value }) => key === `control` && value === `up-to-date`
             )) {
               upToDate = true;
             }
-            this.publish(message);
+            if (!((_b = this.options.signal) == null ? void 0 : _b.aborted)) {
+              this.publish(message);
+            }
           });
         });
       } catch (e) {
         if (e.message !== `This operation was aborted`) {
           console.log(`fetch failed`, e);
-          throw e;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay = Math.min(delay * 1.3, maxDelay);
+          attempt++;
+          console.log(`Retry attempt #${attempt} after ${delay}ms`);
+        } else {
+          break;
         }
-        break;
       }
     }
     console.log(`client is closed`, this.instanceId);

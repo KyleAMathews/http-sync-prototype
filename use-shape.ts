@@ -14,7 +14,6 @@ export function useShape(config) {
       }
       console.log(`new ShapeStream`)
       const issueStream = new ShapeStream(config)
-      console.log({ issueStream })
       issueStream.subscribe((message: Message) => {
         console.log(`message`, message)
 

@@ -5,7 +5,7 @@ import {
   deleteDb,
   updateRow,
   appendRow,
-  lastSnapshotLSN,
+  toggleNetworkConnectivity,
 } from "./server"
 import { v4 as uuidv4 } from "uuid"
 import { parse } from "cache-control-parser"
@@ -14,6 +14,9 @@ import pg from "pg"
 const { Client } = pg
 
 let context = {}
+const serverConfig = {
+  url: `http://localhost:5233`,
+}
 
 beforeAll(async () => {
   context = {}
@@ -43,10 +46,7 @@ beforeAll(async () => {
   // const config = {
   // url: `http://localhost:5233`,
   // }
-  const config = {
-    url: `http://localhost:5233`,
-  }
-  context.server = await createServer({ config, schema })
+  context.server = await createServer({ config: serverConfig, schema })
 })
 
 afterAll(async () => {
@@ -419,5 +419,42 @@ describe(`HTTP Sync`, () => {
     )
     const catchupStatus = catchupEtagValidation.status
     expect(catchupStatus).toEqual(304)
+  })
+  it(`the client should be resiliant against network/server interuptions`, async () => {
+    const { rowId } = context
+    const shapeData = new Map()
+    const aborter = new AbortController()
+    const issueStream = new ShapeStream({
+      shape: { table: `issues` },
+      subscribe: true,
+      signal: aborter.signal,
+    })
+
+    const secondRowId = ``
+    let maxLsn = 0
+    let lsnBeforeUpdate = 10000
+    await new Promise((resolve) => {
+      issueStream.subscribe(async (message) => {
+        if (typeof message.lsn === `number`) {
+          maxLsn = Math.max(maxLsn, message.lsn)
+          if (message.lsn > lsnBeforeUpdate) {
+            aborter.abort()
+            return resolve()
+          }
+        }
+        if (
+          message.headers?.some(
+            ({ key, value }) => key === `control` && value === `up-to-date`
+          )
+        ) {
+          lsnBeforeUpdate = maxLsn
+          toggleNetworkConnectivity()
+          updateRow({ id: rowId, title: `foo1` })
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          toggleNetworkConnectivity()
+        }
+      })
+    })
+    context.secondRowId = secondRowId
   })
 })

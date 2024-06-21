@@ -294,6 +294,11 @@ export async function updateRow({ id, title }) {
   }
 }
 
+let networkDown = false
+export function toggleNetworkConnectivity() {
+  networkDown = !networkDown
+}
+
 export async function createServer({
   schema,
   config,
@@ -313,29 +318,16 @@ export async function createServer({
   app.use(cors())
 
   app.use(express.json())
-  // Middleware to check if request is from a browser
-  // const isBrowserRequest = (req, res, next) => {
-  // const userAgent = req.headers[`user-agent`]
-  // if (userAgent) {
-  // // more is it capable of long-polling and streaming changes...
-  // // probably this should an explicit opt-in thing by the client to long-poll?
-  // const isBrowser = /node|Mozilla|Chrome|Safari|Opera|Edge|Trident/.test(
-  // userAgent
-  // )
-  // if (isBrowser) {
-  // req.isBrowser = true
-  // } else {
-  // req.isBrowser = false
-  // }
-  // } else {
-  // console.log(`No User-Agent header found.`)
-  // req.isBrowser = false
-  // }
-  // next()
-  // }
 
-  // Use the middleware
-  // app.use(isBrowserRequest)
+  app.use((_req, res, next) => {
+    console.log({ networkDown })
+    if (networkDown) {
+      return res.status(500).end()
+    }
+
+    // If you want to continue processing the request
+    next()
+  })
 
   const port = 3000
 
@@ -428,7 +420,7 @@ export async function createServer({
       function close() {
         console.log(`closing live poll`)
         openConnections.delete(reqId)
-        res.status(204).send(`no updates`)
+        res.status(204).end()
       }
 
       openConnections.set(reqId, res)
@@ -437,7 +429,7 @@ export async function createServer({
 
       req.on(`close`, () => clearTimeout(timeoutId))
     } else {
-      res.status(204).JSON([{}])
+      res.status(204).end()
     }
   })
 
