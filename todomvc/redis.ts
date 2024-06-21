@@ -20,10 +20,9 @@ client.connect().then(() => {
     // Begin a Redis transaction
     const pipeline = client.multi()
 
-    // Loop through each object to add its fields to the Redis hash
-    // (Real code would also handle deletes).
+    // Loop through each message and make writes to the Redis hash for action messages
     messages.forEach((message) => {
-      // Upsert/delete new data
+      // Upsert/delete
       if (message.headers?.some(({ key }) => key === `action`)) {
         if (message.headers?.some(({ value }) => value === `delete`)) {
           pipeline.hDel(`issues`, message.key)
