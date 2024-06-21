@@ -33,18 +33,22 @@ var ShapeStream = class {
         await fetch(url, {
           signal: this.options.signal
         }).then((response) => response.json()).then((data) => {
-          data.forEach((update) => {
-            if (typeof update.lsn !== `undefined`) {
-              lastLSN = Math.max(lastLSN, update.lsn);
+          data.forEach((message) => {
+            var _a;
+            if (typeof message.lsn !== `undefined`) {
+              lastLSN = Math.max(lastLSN, message.lsn);
             }
-            if (update.type === `control` && update.data === `up-to-date`) {
+            if ((_a = message.headers) == null ? void 0 : _a.some(
+              ({ key, value }) => key === `control` && value === `up-to-date`
+            )) {
               upToDate = true;
             }
-            this.publish(update);
+            this.publish(message);
           });
         });
       } catch (e) {
         if (e.message !== `This operation was aborted`) {
+          console.log(`fetch failed`, e);
           throw e;
         }
         break;
@@ -56,9 +60,9 @@ var ShapeStream = class {
   subscribe(callback) {
     this.subscribers.push(callback);
   }
-  publish(updates) {
+  publish(message) {
     for (const subscriber of this.subscribers) {
-      subscriber(updates);
+      subscriber(message);
     }
   }
 };

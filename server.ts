@@ -10,6 +10,7 @@ import jwt from "jsonwebtoken"
 import { v4 as uuidv4 } from "uuid"
 import pg from "pg"
 const { Client } = pg
+import { Message } from "./types"
 
 function unsignedJWT(userId, customClaims) {
   const claims = customClaims || {}
@@ -57,8 +58,12 @@ async function getShape({ db, shapeId }) {
     let lsn = 0
     // Add the initial start control message.
     lmdb.putSync(`${shapeId}-log-${padNumber(lsn)}`, {
-      type: `control`,
-      data: `start`,
+      headers: [
+        {
+          key: `control`,
+          value: `start`,
+        },
+      ],
       lsn,
     })
 
@@ -66,16 +71,20 @@ async function getShape({ db, shapeId }) {
     res.result.forEach((row) => {
       lsn += 1
       const log = {
-        type: `data`,
+        key: row.id,
         lsn,
-        data: { ...row },
+        value: { ...row },
+        headers: [{ key: `action`, value: `insert` }],
       }
       data.set(row.id, row)
       snapshot.set(row.id, log)
       lmdb.putSync(`${shapeId}-snapshot-${row.id}`, log)
       lmdb.putSync(`${shapeId}-snapshotHighLsn`, lsn)
-      lmdb.putSync(`${shapeId}-log-${padNumber(lsn)}`, log)
+      if (log.lsn) {
+        lmdb.putSync(`${shapeId}-log-${padNumber(lsn)}`, log)
+      }
     })
+
     shape.set(`lastLsn`, lsn)
     lmdb.putSync(`${shapeId}-has-snapshot`, true)
     shape.set(`snapshot`, snapshot)
@@ -86,20 +95,20 @@ async function getShape({ db, shapeId }) {
     const unsubscribe = liveQuery.subscribe((resultUpdate) => {
       let lastLsn = shape.get(`lastLsn`)
 
-      if (resultUpdate.results) {
+      if (resultUpdate.results && resultUpdate.results.length > 0) {
         const newData = new Map()
         resultUpdate.results.forEach((row) => newData.set(row.id, row))
 
-        const operations = diffMaps(shape.get(`data`), newData)
+        const messages = diffMaps(shape.get(`data`), newData)
 
-        const opsWithLSN = operations.map((op) => {
+        const opsWithLSN: Message[] = messages.map((op) => {
           lastLsn += 1
           shape.set(`lastLsn`, lastLsn)
           const opWithLsn = { ...op, lsn: lastLsn }
           lastSnapshotLSN = lastLsn
           return opWithLsn
         })
-        opsWithLSN.push({ type: `control`, data: `batch-done` })
+        opsWithLSN.push({ headers: [{ key: `control`, value: `batch-done` }] })
 
         openConnections.forEach((res) => {
           res.json(opsWithLSN)
@@ -112,13 +121,19 @@ async function getShape({ db, shapeId }) {
           }
         })
 
-        opsWithLSN.forEach((op) => {
-          if (op.type === `data`) {
-            // lmdb.put(`${shapeId}-snapshot-${op.data.id}`, op)
-            snapshot.set(op.data.id, op)
-          } else if (op.type === `gone`) {
-            // lmdb.removeSync(`${shapeId}-snapshot-${op.data.id}`)
-            snapshot.delete(op.data)
+        opsWithLSN.forEach((message) => {
+          if (
+            message.headers?.some(
+              ({ key, value }) => key === `action` && value !== `delete`
+            )
+          ) {
+            snapshot.set(message.key, message)
+          } else if (
+            message.headers?.some(
+              ({ key, value }) => key === `action` && value === `delete`
+            )
+          ) {
+            snapshot.delete(message.key)
           }
         })
         shape.set(`snapshot`, snapshot)
@@ -202,8 +217,8 @@ function getSnapshotInfo(shapeId) {
   return { snapshotSize, latestSnapshotLSN }
 }
 
-function compactSnapshot({ shapeId, operations }) {
-  operations.forEach((op) => {
+function compactSnapshot({ shapeId, messages }) {
+  messages.forEach((op) => {
     if (op.type === `data`) {
       lmdb.put(`${shapeId}-snapshot-${op.data.id}`, op)
     } else if (op.type === `gone`) {
@@ -216,21 +231,22 @@ const openConnections = new Map()
 const lastId = 1
 
 function diffMaps(map1, map2) {
-  const operations = []
+  const messages = []
 
   // Iterate through each key in the first map
   for (const [key, value] of map1) {
     if (!map2.has(key)) {
       // If the key no longer exists in map2
-      operations.push({
-        type: `gone`,
-        data: key,
+      messages.push({
+        key: key,
+        headers: [{ key: `action`, value: `delete` }],
       })
     } else if (!deepEqual(map2.get(key), value)) {
       // If the key exists but the value is different
-      operations.push({
-        type: `data`,
-        data: map2.get(key),
+      messages.push({
+        key,
+        value: map2.get(key),
+        headers: [{ key: `action`, value: `update` }],
       })
     }
   }
@@ -239,14 +255,15 @@ function diffMaps(map1, map2) {
   for (const [key, value] of map2) {
     if (!map1.has(key)) {
       // If the key is new in map2
-      operations.push({
-        type: `data`,
-        data: value,
+      messages.push({
+        key,
+        value,
+        headers: [{ key: `action`, value: `insert` }],
       })
     }
   }
 
-  return operations
+  return messages
 }
 
 export async function appendRow({ title }) {
@@ -366,6 +383,7 @@ export async function createServer({
     })
 
     if (lsn === -1) {
+      console.log(`GET initial snapshot`)
       const etag = lastSnapshotLSN
       res.set(`etag`, etag)
 
@@ -375,22 +393,22 @@ export async function createServer({
         return res.status(304).end() // Not Modified
       }
       const snapshot = [
-        { type: `control`, data: `start`, lsn: 0 },
+        { lsn: 0, headers: [{ key: `control`, value: `start` }] },
         ...shape.get(`snapshot`).values(),
-        { type: `control`, data: `batch-done` },
+        { headers: [{ key: `control`, value: `batch-done` }] },
       ]
 
       return res.json(snapshot)
     } else if (isCatchUp || lsn + 1 < opsLogLength) {
-      console.log(`catch-up`, { lsn, opsLogLength })
-      const slicedOperations = new Map()
+      console.log(`GET catch-up`, { lsn, opsLogLength })
+      const slicedMessages = new Map()
       const etag = shape.get(`lastLsn`)
       for (const { value } of lmdb.getRange({
         start: `${shapeId}-log-`,
         end: `${shapeId}-log-${MAX_VALUE}`,
         offset: lsn + 1,
       })) {
-        slicedOperations.set(value.data.id, value)
+        slicedMessages.set(value.key, value)
       }
       res.set(`etag`, etag)
 
@@ -401,12 +419,12 @@ export async function createServer({
       }
 
       return res.json([
-        ...slicedOperations.values(),
-        { type: `control`, data: `up-to-date` },
-        { type: `control`, data: `batch-done` },
+        ...slicedMessages.values(),
+        { headers: [{ key: `control`, value: `up-to-date` }] },
+        { headers: [{ key: `control`, value: `batch-done` }] },
       ])
     } else if (isLive) {
-      console.log(`live updates`, { lsn })
+      console.log(`GET live updates`, { lsn })
       function close() {
         console.log(`closing live poll`)
         openConnections.delete(reqId)
@@ -419,7 +437,7 @@ export async function createServer({
 
       req.on(`close`, () => clearTimeout(timeoutId))
     } else {
-      res.status(204).send(`no updates`)
+      res.status(204).JSON([{}])
     }
   })
 

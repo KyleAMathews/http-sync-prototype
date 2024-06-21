@@ -1,7 +1,8 @@
 const baseUrl = `http://localhost:3000`
+import { Message } from "./types"
 
 export class ShapeStream {
-  private subscribers: ((updates: any[]) => void)[] = []
+  private subscribers: ((message: Message) => void)[] = []
 
   constructor(options = { subscribe: true }) {
     this.instanceId = Math.random()
@@ -40,19 +41,25 @@ export class ShapeStream {
           signal: this.options.signal,
         })
           .then((response) => response.json())
-          .then((data) => {
-            data.forEach((update) => {
-              if (typeof update.lsn !== `undefined`) {
-                lastLSN = Math.max(lastLSN, update.lsn)
+          .then((data: Message[]) => {
+            data.forEach((message) => {
+              if (typeof message.lsn !== `undefined`) {
+                lastLSN = Math.max(lastLSN, message.lsn)
               }
-              if (update.type === `control` && update.data === `up-to-date`) {
+              if (
+                message.headers?.some(
+                  ({ key, value }) =>
+                    key === `control` && value === `up-to-date`
+                )
+              ) {
                 upToDate = true
               }
-              this.publish(update)
+              this.publish(message)
             })
           })
       } catch (e) {
         if (e.message !== `This operation was aborted`) {
+          console.log(`fetch failed`, e)
           throw e
         }
 
@@ -64,13 +71,13 @@ export class ShapeStream {
     this.outsideResolve()
   }
 
-  subscribe(callback: (updates: any[]) => void) {
+  subscribe(callback: (message: Message) => void) {
     this.subscribers.push(callback)
   }
 
-  publish(updates: any) {
+  publish(message: Message) {
     for (const subscriber of this.subscribers) {
-      subscriber(updates)
+      subscriber(message)
     }
   }
 }

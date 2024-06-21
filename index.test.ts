@@ -64,17 +64,24 @@ describe(`HTTP Sync`, () => {
   it(`should work with empty shapes`, async () => {
     // Get initial data
     const shapeData = new Map()
+    const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
       subscribe: false,
+      signal: aborter.signal,
     })
 
     await new Promise((resolve) => {
-      issueStream.subscribe((update) => {
-        if (update.type === `data`) {
-          shapeData.set(update.data.id, update.data)
+      issueStream.subscribe((message) => {
+        if (message.headers?.some(({ key }) => key === `action`)) {
+          shapeData.set(message.key, message.value)
         }
-        if (update.type === `control` && update.data === `up-to-date`) {
+        if (
+          message.headers?.some(
+            ({ key, value }) => key === `control` && value === `up-to-date`
+          )
+        ) {
+          aborter.abort()
           return resolve()
         }
       })
@@ -97,22 +104,29 @@ describe(`HTTP Sync`, () => {
       console.log(e)
       throw e
     }
-    // Wait for sqlite to get all the updates.
+    // Wait for sqlite to get all the messages.
     await new Promise((resolve) => setTimeout(resolve, 40))
 
     // Get initial data
     const shapeData = new Map()
+    const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
       subscribe: false,
+      signal: aborter.signal,
     })
 
     await new Promise((resolve) => {
-      issueStream.subscribe((update) => {
-        if (update.type === `data`) {
-          shapeData.set(update.data.id, update.data)
+      issueStream.subscribe((message) => {
+        if (message.headers?.some(({ key }) => key === `action`)) {
+          shapeData.set(message.key, message.value)
         }
-        if (update.type === `control` && update.data === `up-to-date`) {
+        if (
+          message.headers?.some(
+            ({ key, value }) => key === `control` && value === `up-to-date`
+          )
+        ) {
+          aborter.abort()
           return resolve()
         }
       })
@@ -127,17 +141,24 @@ describe(`HTTP Sync`, () => {
 
     // Get initial data
     const shapeData = new Map()
+    const aborter = new AbortController()
     const fooStream = new ShapeStream({
       shape: { table: `foo` },
       subscribe: false,
+      signal: aborter.signal,
     })
 
     await new Promise((resolve) => {
-      fooStream.subscribe((update) => {
-        if (update.type === `data`) {
-          shapeData.set(update.data.id, update.data)
+      fooStream.subscribe((message) => {
+        if (message.headers?.some(({ key }) => key === `action`)) {
+          shapeData.set(message.key, message.value)
         }
-        if (update.type === `control` && update.data === `up-to-date`) {
+        if (
+          message.headers?.some(
+            ({ key, value }) => key === `control` && value === `up-to-date`
+          )
+        ) {
+          aborter.abort()
           return resolve()
         }
       })
@@ -147,7 +168,7 @@ describe(`HTTP Sync`, () => {
     expect(values).toHaveLength(1)
     expect(values[0].title).toEqual(`I AM FOO TABLE`)
   })
-  it(`should get initial data and then receive updates`, async () => {
+  it(`should get initial data and then receive messages`, async () => {
     const { rowId } = context
     const shapeData = new Map()
     const aborter = new AbortController()
@@ -160,21 +181,25 @@ describe(`HTTP Sync`, () => {
     let secondRowId = ``
     let batchDoneCount = 0
     await new Promise((resolve) => {
-      issueStream.subscribe(async (update) => {
-        if (update.type === `control` && update.data === `batch-done`) {
+      issueStream.subscribe(async (message) => {
+        if (
+          message.headers?.some(
+            ({ key, value }) => key === `control` && value === `batch-done`
+          )
+        ) {
           batchDoneCount += 1
         }
-        if (update.type === `data`) {
-          shapeData.set(update.data.id, update.data)
+        if (message.headers?.some(({ key }) => key === `action`)) {
+          shapeData.set(message.key, message.value)
         }
-        if (update.lsn === 1) {
+        if (message.lsn === 1) {
           updateRow({ id: rowId, title: `foo1` })
         }
-        if (update.lsn === 2) {
+        if (message.lsn === 2) {
           secondRowId = await appendRow({ title: `foo2` })
         }
 
-        if (update.lsn === 3) {
+        if (message.lsn === 3) {
           aborter.abort()
           expect(shapeData).toEqual(
             new Map([
@@ -208,15 +233,15 @@ describe(`HTTP Sync`, () => {
     })
 
     const promise1 = new Promise(async (resolve) => {
-      issueStream1.subscribe((update) => {
-        if (update.type === `data`) {
-          shapeData1.set(update.data.id, update.data)
+      issueStream1.subscribe((message) => {
+        if (message.headers?.some(({ key }) => key === `action`)) {
+          shapeData1.set(message.key, message.value)
         }
-        if (update.lsn === 3) {
+        if (message.lsn === 3) {
           setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
         }
 
-        if (update.lsn === 4) {
+        if (message.lsn === 4) {
           aborter1.abort()
           expect(shapeData1).toEqual(
             new Map([
@@ -230,12 +255,12 @@ describe(`HTTP Sync`, () => {
     })
 
     const promise2 = new Promise(async (resolve) => {
-      issueStream2.subscribe((update) => {
-        if (update.type === `data`) {
-          shapeData2.set(update.data.id, update.data)
+      issueStream2.subscribe((message) => {
+        if (message.headers?.some(({ key }) => key === `action`)) {
+          shapeData2.set(message.key, message.value)
         }
 
-        if (update.lsn === 4) {
+        if (message.lsn === 4) {
           aborter2.abort()
           expect(shapeData2).toEqual(
             new Map([
@@ -260,12 +285,16 @@ describe(`HTTP Sync`, () => {
       signal: aborter.signal,
     })
     await new Promise((resolve) => {
-      issueStream.subscribe((update) => {
-        if (update.lsn) {
-          lastLsn = Math.max(lastLsn, update.lsn)
+      issueStream.subscribe((message) => {
+        if (message.lsn) {
+          lastLsn = Math.max(lastLsn, message.lsn)
         }
 
-        if (update.type === `control` && update.data === `up-to-date`) {
+        if (
+          message.headers?.some(
+            ({ key, value }) => key === `control` && value === `up-to-date`
+          )
+        ) {
           aborter.abort()
           resolve()
         }
@@ -282,10 +311,10 @@ describe(`HTTP Sync`, () => {
     await appendRow({ title: `foo12` })
     await appendRow({ title: `foo13` })
     await new Promise((resolve) => setTimeout(resolve, 10))
-    // Add update — which the server should then overwrite the original appendRow
+    // Add message — which the server should then overwrite the original appendRow
     // meaning there won't be an extra operation.
     updateRow({ id, title: `--foo5` })
-    // Wait for sqlite to get all the updates.
+    // Wait for sqlite to get all the messages.
     await new Promise((resolve) => setTimeout(resolve, 60))
 
     let catchupOpsCount = 0
@@ -297,11 +326,15 @@ describe(`HTTP Sync`, () => {
       lsn: lastLsn,
     })
     await new Promise((resolve) => {
-      newIssueStream.subscribe((update) => {
-        if (update.type === `data`) {
+      newIssueStream.subscribe((message) => {
+        if (message.headers?.some(({ key }) => key === `action`)) {
           catchupOpsCount += 1
         }
-        if (update.type === `control` && update.data === `up-to-date`) {
+        if (
+          message.headers?.some(
+            ({ key, value }) => key === `control` && value === `up-to-date`
+          )
+        ) {
           newAborter.abort()
           resolve()
         }
@@ -325,7 +358,7 @@ describe(`HTTP Sync`, () => {
     await appendRow({ title: `foo6` })
     await appendRow({ title: `foo7` })
     await appendRow({ title: `foo8` })
-    // Wait for sqlite to get all the updates.
+    // Wait for sqlite to get all the messages.
     await new Promise((resolve) => setTimeout(resolve, 40))
 
     const res2 = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
