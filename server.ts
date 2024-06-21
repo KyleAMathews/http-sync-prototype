@@ -86,40 +86,44 @@ async function getShape({ db, shapeId }) {
     const unsubscribe = liveQuery.subscribe((resultUpdate) => {
       let lastLsn = shape.get(`lastLsn`)
 
-      const newData = new Map()
-      resultUpdate.results.forEach((row) => newData.set(row.id, row))
+      if (resultUpdate.results) {
+        const newData = new Map()
+        resultUpdate.results.forEach((row) => newData.set(row.id, row))
 
-      const operations = diffMaps(shape.get(`data`), newData)
+        const operations = diffMaps(shape.get(`data`), newData)
 
-      const opsWithLSN = operations.map((op) => {
-        lastLsn += 1
-        shape.set(`lastLsn`, lastLsn)
-        const opWithLsn = { ...op, lsn: lastLsn }
-        lastSnapshotLSN = lastLsn
-        return opWithLsn
-      })
-      console.log(`opsWithLSN`, opsWithLSN)
-      openConnections.forEach((res) => {
-        res.json(opsWithLSN)
-      })
-      openConnections.clear()
+        const opsWithLSN = operations.map((op) => {
+          lastLsn += 1
+          shape.set(`lastLsn`, lastLsn)
+          const opWithLsn = { ...op, lsn: lastLsn }
+          lastSnapshotLSN = lastLsn
+          return opWithLsn
+        })
+        opsWithLSN.push({ type: `control`, data: `batch-done` })
 
-      opsWithLSN.forEach((op) => {
-        lmdb.putSync(`${shapeId}-log-${padNumber(op.lsn)}`, op)
-      })
+        openConnections.forEach((res) => {
+          res.json(opsWithLSN)
+        })
+        openConnections.clear()
 
-      opsWithLSN.forEach((op) => {
-        if (op.type === `data`) {
-          // lmdb.put(`${shapeId}-snapshot-${op.data.id}`, op)
-          snapshot.set(op.data.id, op)
-        } else if (op.type === `gone`) {
-          console.log({ op })
-          // lmdb.removeSync(`${shapeId}-snapshot-${op.data.id}`)
-          snapshot.delete(op.data)
-        }
-      })
-      shape.set(`snapshot`, snapshot)
-      shape.set(`data`, newData)
+        opsWithLSN.forEach((op) => {
+          if (op.lsn) {
+            lmdb.putSync(`${shapeId}-log-${padNumber(op.lsn)}`, op)
+          }
+        })
+
+        opsWithLSN.forEach((op) => {
+          if (op.type === `data`) {
+            // lmdb.put(`${shapeId}-snapshot-${op.data.id}`, op)
+            snapshot.set(op.data.id, op)
+          } else if (op.type === `gone`) {
+            // lmdb.removeSync(`${shapeId}-snapshot-${op.data.id}`)
+            snapshot.delete(op.data)
+          }
+        })
+        shape.set(`snapshot`, snapshot)
+        shape.set(`data`, newData)
+      }
     })
 
     shape.set(`unsubscribe`, unsubscribe)
@@ -373,6 +377,7 @@ export async function createServer({
       const snapshot = [
         { type: `control`, data: `start`, lsn: 0 },
         ...shape.get(`snapshot`).values(),
+        { type: `control`, data: `batch-done` },
       ]
 
       return res.json(snapshot)
@@ -398,6 +403,7 @@ export async function createServer({
       return res.json([
         ...slicedOperations.values(),
         { type: `control`, data: `up-to-date` },
+        { type: `control`, data: `batch-done` },
       ])
     } else if (isLive) {
       console.log(`live updates`, { lsn })

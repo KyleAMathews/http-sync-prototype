@@ -158,8 +158,12 @@ describe(`HTTP Sync`, () => {
     })
 
     let secondRowId = ``
+    let batchDoneCount = 0
     await new Promise((resolve) => {
       issueStream.subscribe(async (update) => {
+        if (update.type === `control` && update.data === `batch-done`) {
+          batchDoneCount += 1
+        }
         if (update.type === `data`) {
           shapeData.set(update.data.id, update.data)
         }
@@ -178,6 +182,7 @@ describe(`HTTP Sync`, () => {
               [secondRowId, { id: secondRowId, title: `foo2` }],
             ])
           )
+          expect(batchDoneCount).toEqual(3)
           resolve()
         }
       })

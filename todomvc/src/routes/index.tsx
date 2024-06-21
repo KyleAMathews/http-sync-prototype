@@ -24,7 +24,7 @@ export default function Index() {
         <Flex gap="3" direction="column">
           {todos.map((todo) => {
             return (
-              <Flex gap="2" align="center">
+              <Flex key={todo.id} gap="2" align="center">
                 <Text as="label">
                   <Flex gap="2" align="center">
                     <Checkbox

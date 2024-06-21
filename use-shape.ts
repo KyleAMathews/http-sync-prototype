@@ -17,18 +17,29 @@ export function useShape(config) {
       issueStream.subscribe((update) => {
         console.log({ update })
 
+        // Upsert data message
         if (update.type === `data`) {
           shapeMap.set(update.data.id, update.data)
-          if (upToDate) {
-            updateSubscribers()
-          }
         }
+
+        // Delete data message
         if (update.type === `gone`) {
           shapeMap.delete(update.data)
-          updateSubscribers()
         }
+
+        // Control message telling client they're up-to-date
         if (update.type === `control` && update.data === `up-to-date`) {
           upToDate = true
+        }
+
+        // The end of each JSON batch of ops has a `batch-done` control message
+        // so wait for that (and that we're up-to-date) before notifying subscribers.
+        console.log({ upToDate, type: update.type, data: update.data })
+        if (
+          upToDate &&
+          update.type === `control` &&
+          update.data === `batch-done`
+        ) {
           updateSubscribers()
         }
       })
