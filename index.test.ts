@@ -267,7 +267,7 @@ describe(`HTTP Sync`, () => {
       })
     })
 
-    await appendRow({ title: `foo5` })
+    const id = await appendRow({ title: `foo5` })
     await appendRow({ title: `foo6` })
     await appendRow({ title: `foo7` })
     await appendRow({ title: `foo8` })
@@ -276,6 +276,10 @@ describe(`HTTP Sync`, () => {
     await appendRow({ title: `foo11` })
     await appendRow({ title: `foo12` })
     await appendRow({ title: `foo13` })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    // Add update — which the server should then overwrite the original appendRow
+    // meaning there won't be an extra operation.
+    updateRow({ id, title: `--foo5` })
     // Wait for sqlite to get all the updates.
     await new Promise((resolve) => setTimeout(resolve, 60))
 
@@ -322,6 +326,27 @@ describe(`HTTP Sync`, () => {
     const res2 = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
     const etag2 = parseInt(res2.headers.get(`etag`), 10)
     expect(etag2).toBeTypeOf(`number`)
+    expect(etag).toBeLessThan(100)
+  })
+
+  it(`should return as uncachable if &live is set`, async () => {
+    const res = await fetch(
+      `http://localhost:3000/shape/issues?lsn=10&live`,
+      {}
+    )
+    const cacheHeaders = res.headers.get(`cache-control`)
+    const directives = parse(cacheHeaders)
+    expect(directives).toEqual({
+      "no-store": true,
+      "no-cache": true,
+      "must-revalidate": true,
+      "max-age": 0,
+    })
+    const pragma = res.headers.get(`pragma`)
+    expect(pragma).toEqual(`no-cache`)
+
+    const etag = parseInt(res.headers.get(`etag`), 10)
+    expect(etag).toBeTypeOf(`number`)
     expect(etag).toBeLessThan(100)
   })
 

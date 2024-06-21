@@ -20,6 +20,8 @@ var ShapeStream = class {
       let url = `http://localhost:3000/shape/${this.options.shape.table}?lsn=${lastLSN}`;
       if (pollCount === 2) {
         url += `&catchup`;
+      } else if (upToDate) {
+        url += `&live`;
       }
       console.log({
         lastLSN,

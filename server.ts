@@ -31,6 +31,10 @@ client.connect()
 
 const shapes = new Map()
 const shapesSetupPromise = new Map()
+
+function padNumber(num) {
+  return num.toString().padStart(10, `0`)
+}
 async function getShape({ db, shapeId }) {
   if (shapes.has(shapeId) && !shapesSetupPromise.has(shapeId)) {
     return shapes.get(shapeId)
@@ -52,7 +56,11 @@ async function getShape({ db, shapeId }) {
 
     let lsn = 0
     // Add the initial start control message.
-    lmdb.putSync(`${shapeId}-log-0`, { type: `control`, data: `start`, lsn })
+    lmdb.putSync(`${shapeId}-log-${padNumber(lsn)}`, {
+      type: `control`,
+      data: `start`,
+      lsn,
+    })
 
     const res = await liveQuery()
     res.result.forEach((row) => {
@@ -66,7 +74,7 @@ async function getShape({ db, shapeId }) {
       snapshot.set(row.id, log)
       lmdb.putSync(`${shapeId}-snapshot-${row.id}`, log)
       lmdb.putSync(`${shapeId}-snapshotHighLsn`, lsn)
-      lmdb.putSync(`${shapeId}-log-${lsn}`, log)
+      lmdb.putSync(`${shapeId}-log-${padNumber(lsn)}`, log)
     })
     shape.set(`lastLsn`, lsn)
     lmdb.putSync(`${shapeId}-has-snapshot`, true)
@@ -90,13 +98,14 @@ async function getShape({ db, shapeId }) {
         lastSnapshotLSN = lastLsn
         return opWithLsn
       })
+      console.log(`opsWithLSN`, opsWithLSN)
       openConnections.forEach((res) => {
         res.json(opsWithLSN)
       })
       openConnections.clear()
 
       opsWithLSN.forEach((op) => {
-        lmdb.putSync(`${shapeId}-log-${op.lsn}`, op)
+        lmdb.putSync(`${shapeId}-log-${padNumber(op.lsn)}`, op)
       })
 
       opsWithLSN.forEach((op) => {
@@ -104,8 +113,9 @@ async function getShape({ db, shapeId }) {
           // lmdb.put(`${shapeId}-snapshot-${op.data.id}`, op)
           snapshot.set(op.data.id, op)
         } else if (op.type === `gone`) {
+          console.log({ op })
           // lmdb.removeSync(`${shapeId}-snapshot-${op.data.id}`)
-          snapshot.delete(op.data.id)
+          snapshot.delete(op.data)
         }
       })
       shape.set(`snapshot`, snapshot)
@@ -283,28 +293,28 @@ export async function createServer({
 
   app.use(express.json())
   // Middleware to check if request is from a browser
-  const isBrowserRequest = (req, res, next) => {
-    const userAgent = req.headers[`user-agent`]
-    if (userAgent) {
-      // more is it capable of long-polling and streaming changes...
-      // probably this should an explicit opt-in thing by the client to long-poll?
-      const isBrowser = /node|Mozilla|Chrome|Safari|Opera|Edge|Trident/.test(
-        userAgent
-      )
-      if (isBrowser) {
-        req.isBrowser = true
-      } else {
-        req.isBrowser = false
-      }
-    } else {
-      console.log(`No User-Agent header found.`)
-      req.isBrowser = false
-    }
-    next()
-  }
+  // const isBrowserRequest = (req, res, next) => {
+  // const userAgent = req.headers[`user-agent`]
+  // if (userAgent) {
+  // // more is it capable of long-polling and streaming changes...
+  // // probably this should an explicit opt-in thing by the client to long-poll?
+  // const isBrowser = /node|Mozilla|Chrome|Safari|Opera|Edge|Trident/.test(
+  // userAgent
+  // )
+  // if (isBrowser) {
+  // req.isBrowser = true
+  // } else {
+  // req.isBrowser = false
+  // }
+  // } else {
+  // console.log(`No User-Agent header found.`)
+  // req.isBrowser = false
+  // }
+  // next()
+  // }
 
   // Use the middleware
-  app.use(isBrowserRequest)
+  // app.use(isBrowserRequest)
 
   const port = 3000
 
@@ -325,10 +335,17 @@ export async function createServer({
   // Endpoint to get initial data and subscribe to updates
   app.get(`/shape/:id`, async (req: Request, res: Response) => {
     const lsn = parseInt(req.query.lsn, 10)
+    const isLive = `live` in req.query && req.query.live !== false
     const isCatchUp = `catchup` in req.query && req.query.catchup !== false
 
     // Set caching headers.
-    res.set(`Cache-Control`, `max-age=60, stale-while-revalidate=300`)
+    if (isLive) {
+      res.set(`Cache-Control`, `no-store, no-cache, must-revalidate, max-age=0`)
+      res.set(`Pragma`, `no-cache`)
+      res.set(`Expires`, `0`)
+    } else {
+      res.set(`Cache-Control`, `max-age=60, stale-while-revalidate=300`)
+    }
 
     const reqId = Math.random()
     const shapeId = req.params.id
@@ -338,6 +355,7 @@ export async function createServer({
 
     console.log(`server /shape:id`, {
       lsn,
+      isLive,
       opsLogLength,
       isCatchUp,
       query: req.query,
@@ -360,14 +378,14 @@ export async function createServer({
       return res.json(snapshot)
     } else if (isCatchUp || lsn + 1 < opsLogLength) {
       console.log(`catch-up`, { lsn, opsLogLength })
-      const slicedOperations = []
+      const slicedOperations = new Map()
       const etag = shape.get(`lastLsn`)
       for (const { value } of lmdb.getRange({
         start: `${shapeId}-log-`,
         end: `${shapeId}-log-${MAX_VALUE}`,
         offset: lsn + 1,
       })) {
-        slicedOperations.push(value)
+        slicedOperations.set(value.data.id, value)
       }
       res.set(`etag`, etag)
 
@@ -378,10 +396,10 @@ export async function createServer({
       }
 
       return res.json([
-        ...slicedOperations,
+        ...slicedOperations.values(),
         { type: `control`, data: `up-to-date` },
       ])
-    } else if (req.isBrowser) {
+    } else if (isLive) {
       console.log(`live updates`, { lsn })
       function close() {
         console.log(`closing live poll`)
