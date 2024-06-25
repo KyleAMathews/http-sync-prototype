@@ -2,6 +2,7 @@
 var ShapeStream = class {
   constructor(options = { subscribe: true }) {
     this.subscribers = [];
+    this.batchSubscribers = [];
     this.instanceId = Math.random();
     this.options = options;
     console.log(`constructor`, this);
@@ -13,7 +14,7 @@ var ShapeStream = class {
   }
   async startStream() {
     var _a;
-    let lastLSN = this.options.lsn || -1;
+    let lastOffset = this.options.offset || -1;
     let upToDate = false;
     let pollCount = 0;
     let attempt = 0;
@@ -22,14 +23,14 @@ var ShapeStream = class {
     let delay = initialDelay;
     while (!((_a = this.options.signal) == null ? void 0 : _a.aborted) && (!upToDate || this.options.subscribe)) {
       pollCount += 1;
-      let url = `http://localhost:3000/shape/${this.options.shape.table}?lsn=${lastLSN}`;
+      let url = `http://localhost:3000/shape/${this.options.shape.table}?offset=${lastOffset}`;
       if (pollCount === 2) {
         url += `&catchup`;
       } else if (upToDate) {
         url += `&live`;
       }
       console.log({
-        lastLSN,
+        lastOffset,
         upToDate,
         pollCount,
         url
@@ -42,16 +43,18 @@ var ShapeStream = class {
             throw new Error(`HTTP error! Status: ${response.status}`);
           }
           attempt = 0;
+          if (response.status === 204) {
+            return [];
+          }
           return response.json();
         }).then((data) => {
+          this.publishBatch(data);
           data.forEach((message) => {
             var _a2, _b;
-            if (typeof message.lsn !== `undefined`) {
-              lastLSN = Math.max(lastLSN, message.lsn);
+            if (typeof message.offset !== `undefined`) {
+              lastOffset = Math.max(lastOffset, message.offset);
             }
-            if ((_a2 = message.headers) == null ? void 0 : _a2.some(
-              ({ key, value }) => key === `control` && value === `up-to-date`
-            )) {
+            if (((_a2 = message.headers) == null ? void 0 : _a2[`control`]) === `up-to-date`) {
               upToDate = true;
             }
             if (!((_b = this.options.signal) == null ? void 0 : _b.aborted)) {
@@ -80,6 +83,14 @@ var ShapeStream = class {
   publish(message) {
     for (const subscriber of this.subscribers) {
       subscriber(message);
+    }
+  }
+  subscribeBatch(callback) {
+    this.batchSubscribers.push(callback);
+  }
+  publishBatch(messages) {
+    for (const subscriber of this.batchSubscribers) {
+      subscriber(messages);
     }
   }
 };

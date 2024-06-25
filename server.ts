@@ -135,6 +135,9 @@ async function getShape({ db, shapeId }) {
         return messageWithOffset
       })
       const openConnections = shape.get(`openConnections`)
+
+      messagesWithOffset.push({ headers: { control: `batch-done` } })
+
       openConnections.forEach((res) => {
         res.json(messagesWithOffset)
       })

@@ -15,34 +15,29 @@ export function useShape(config) {
       console.log(`new ShapeStream`)
       const issueStream = new ShapeStream(config)
       issueStream.subscribe((message: Message) => {
-        console.log(`message`, message)
+        console.log({ message })
+        console.log(
+          `message`,
+          message,
+          message.headers?.[`action`],
+          [`insert`, `update`].includes(message.headers?.[`action`])
+        )
 
         // Upsert/delete new data
-        if (message.headers?.some(({ key }) => key === `action`)) {
-          if (message.headers?.some(({ value }) => value === `delete`)) {
-            shapeMap.delete(message.key)
-          } else {
-            shapeMap.set(message.key, message.value)
-          }
+        if (message.headers?.[`action`] === `delete`) {
+          shapeMap.delete(message.key)
+        } else if ([`insert`, `update`].includes(message.headers?.[`action`])) {
+          shapeMap.set(message.key, message.value)
         }
 
         // Control message telling client they're up-to-date
-        if (
-          message.headers?.some(
-            ({ key, value }) => key === `control` && value === `up-to-date`
-          )
-        ) {
+        if (message.headers?.[`control`] === `up-to-date`) {
           upToDate = true
         }
 
         // The end of each JSON batch of ops has a `batch-done` control message
         // so wait for that (and that we're up-to-date) before notifying subscribers.
-        if (
-          upToDate &&
-          message.headers?.some(
-            ({ key, value }) => key === `control` && value === `batch-done`
-          )
-        ) {
+        if (message.headers?.[`control`] === `batch-done`) {
           // TODO only update if there's been a change.
           updateSubscribers()
         }
