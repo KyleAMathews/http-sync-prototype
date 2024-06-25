@@ -8,5 +8,5 @@ export type Message = {
   key?: any
   value?: any
   headers?: Header
-  lsn?: number
+  offset?: number
 }

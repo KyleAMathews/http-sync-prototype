@@ -36,6 +36,50 @@ const shapesSetupPromise = new Map()
 function padNumber(num) {
   return num.toString().padStart(10, `0`)
 }
+
+async function setupSyncing(db) {
+  let lsn = 0
+  const promises = []
+  Object.entries(db).forEach(([key, value]) => {
+    if (`sync` in value) {
+      promises.push(value.sync())
+    }
+  })
+
+  const results = await Promise.all(promises)
+  await Promise.all(results.map((result) => result.synced))
+
+  // Start listening for updates.
+  Object.entries(db).forEach(async ([key, value]) => {
+    if (`sync` in value) {
+      promises.push(value.sync())
+      const liveQuery = await value.liveMany()
+      let data = new Map()
+      const res = await liveQuery()
+      res.result.forEach((row) => {
+        data.set(row.id, row)
+      })
+
+      liveQuery.subscribe(async (resultUpdate) => {
+        if (resultUpdate.results && resultUpdate.results.length > 0) {
+          const newData = new Map()
+          resultUpdate.results.forEach((row) => newData.set(row.id, row))
+
+          const messages = diffMaps(data, newData)
+          messages.forEach(async (message) => {
+            lmdb.putSync(`replication-log-${padNumber(lsn)}`, message)
+            lsn += 1
+          })
+
+          // Get shape (there's only one per table right now).
+          const shape = await getShape({ db, shapeId: key })
+          shape.get(`appendToShapeLog`)({ messages })
+          data = newData
+        }
+      })
+    }
+  })
+}
 async function getShape({ db, shapeId }) {
   if (shapes.has(shapeId) && !shapesSetupPromise.has(shapeId)) {
     return shapes.get(shapeId)
@@ -48,89 +92,59 @@ async function getShape({ db, shapeId }) {
     })
     shapesSetupPromise.set(shapeId, setupPromise)
     const shape = new Map()
-    const snapshot = new Map()
     const data = new Map()
     shapes.set(shapeId, shape)
     const shapeSync = await db[shapeId].sync()
     await shapeSync.synced
     const liveQuery = await db[shapeId].liveMany()
 
-    let lsn = 0
+    let offset = 0
     // Add the initial start control message.
-    lmdb.putSync(`${shapeId}-log-${padNumber(lsn)}`, {
+    lmdb.putSync(`${shapeId}-log-${padNumber(offset)}`, {
       headers: {
         control: `start`,
       },
-      lsn,
+      offset,
     })
 
     const res = await liveQuery()
     res.result.forEach((row) => {
-      lsn += 1
+      offset += 1
       const log = {
         key: row.id,
-        lsn,
+        offset,
         value: { ...row },
         headers: { action: `insert` },
       }
       data.set(row.id, row)
-      snapshot.set(row.id, log)
-      lmdb.putSync(`${shapeId}-snapshot-${row.id}`, log)
-      lmdb.putSync(`${shapeId}-snapshotHighLsn`, lsn)
-      if (log.lsn) {
-        lmdb.putSync(`${shapeId}-log-${padNumber(lsn)}`, log)
+      if (log.offset) {
+        lmdb.putSync(`${shapeId}-log-${padNumber(offset)}`, log)
       }
     })
 
-    shape.set(`lastLsn`, lsn)
-    lmdb.putSync(`${shapeId}-has-snapshot`, true)
-    shape.set(`snapshot`, snapshot)
+    shape.set(`lastOffset`, offset)
     shape.set(`data`, data)
+    shape.set(`openConnections`, new Map())
+    shape.set(`appendToShapeLog`, ({ messages }) => {
+      console.log(`appendToShapeLog`, messages)
+      let offset = shape.get(`lastOffset`)
+      const messagesWithOffset = messages.map((message) => {
+        offset += 1
+        const messageWithOffset = { ...message, offset }
+        lmdb.putSync(`${shapeId}-log-${padNumber(offset)}`, messageWithOffset)
+        return messageWithOffset
+      })
+      const openConnections = shape.get(`openConnections`)
+      openConnections.forEach((res) => {
+        res.json(messagesWithOffset)
+      })
 
-    // We're finished with the initial setup of the shape, now we'll listen
-    // for updates.
-    const unsubscribe = liveQuery.subscribe((resultUpdate) => {
-      let lastLsn = shape.get(`lastLsn`)
+      openConnections.clear()
+      shape.set(`openConnections`, openConnections)
 
-      if (resultUpdate.results && resultUpdate.results.length > 0) {
-        const newData = new Map()
-        resultUpdate.results.forEach((row) => newData.set(row.id, row))
-
-        const messages = diffMaps(shape.get(`data`), newData)
-
-        const opsWithLSN: Message[] = messages.map((op) => {
-          lastLsn += 1
-          shape.set(`lastLsn`, lastLsn)
-          const opWithLsn = { ...op, lsn: lastLsn }
-          lastSnapshotLSN = lastLsn
-          return opWithLsn
-        })
-        opsWithLSN.push({ headers: { control: `batch-done` } })
-
-        openConnections.forEach((res) => {
-          res.json(opsWithLSN)
-        })
-        openConnections.clear()
-
-        opsWithLSN.forEach((op) => {
-          if (op.lsn) {
-            lmdb.putSync(`${shapeId}-log-${padNumber(op.lsn)}`, op)
-          }
-        })
-
-        opsWithLSN.forEach((message) => {
-          if (message.headers?.[`action`] !== `delete`) {
-            snapshot.set(message.key, message)
-          } else if (message.headers?.[`action`] === `delete`) {
-            snapshot.delete(message.key)
-          }
-        })
-        shape.set(`snapshot`, snapshot)
-        shape.set(`data`, newData)
-      }
+      shape.set(`lastOffset`, offset)
+      console.log({ shape })
     })
-
-    shape.set(`unsubscribe`, unsubscribe)
 
     outsideResolve(shape)
     shapesSetupPromise.delete(shapeId)
@@ -176,49 +190,6 @@ export function deleteDb() {
   lmdb.dropSync()
 }
 
-const fakeDb = new Map([[1, { id: 1, title: `foo` }]])
-
-export let lastSnapshotLSN = 0
-
-function getOpsLogLength(shapeId) {
-  let opsLogLength = 0
-  for (const key of lmdb.getKeys({
-    start: `${shapeId}-log-`,
-    end: `${shapeId}-log-${MAX_VALUE}`,
-  })) {
-    opsLogLength += 1
-  }
-
-  return opsLogLength
-}
-
-function getSnapshotInfo(shapeId) {
-  let snapshotSize = 0
-  for (const _key of lmdb.getKeys({
-    start: `${shapeId}-snapshot-`,
-    end: `${shapeId}-snapshot-${MAX_VALUE}`,
-  })) {
-    snapshotSize += 1
-  }
-
-  const latestSnapshotLSN = lmdb.get(`${shapeId}-snapshotHighLsn`)
-
-  return { snapshotSize, latestSnapshotLSN }
-}
-
-function compactSnapshot({ shapeId, messages }) {
-  messages.forEach((op) => {
-    if (op.type === `data`) {
-      lmdb.put(`${shapeId}-snapshot-${op.data.id}`, op)
-    } else if (op.type === `gone`) {
-      lmdb.removeSync(`${shapeId}-snapshot-${op.data.id}`)
-    }
-  })
-}
-
-const openConnections = new Map()
-const lastId = 1
-
 function diffMaps(map1, map2) {
   const messages = []
 
@@ -256,7 +227,7 @@ function diffMaps(map1, map2) {
 }
 
 export async function appendRow({ title }) {
-  console.log(`appending row`)
+  console.log(`appending row`, { title })
   const uuid = uuidv4()
   try {
     const result = await client.query(
@@ -301,6 +272,8 @@ export async function createServer({
   await electric.connect(token)
   const { db } = electric
 
+  await setupSyncing(db)
+
   const app = express()
 
   // Enable CORS for all routes
@@ -336,7 +309,7 @@ export async function createServer({
 
   // Endpoint to get initial data and subscribe to updates
   app.get(`/shape/:id`, async (req: Request, res: Response) => {
-    const lsn = parseInt(req.query.lsn, 10)
+    const offset = parseInt(req.query.offset, 10)
     const isLive = `live` in req.query && req.query.live !== false
     const isCatchUp = `catchup` in req.query && req.query.catchup !== false
 
@@ -353,19 +326,19 @@ export async function createServer({
     const shapeId = req.params.id
     const shape = await getShape({ db, shapeId })
 
-    const opsLogLength = getOpsLogLength(shapeId)
+    const lastOffset = shape.get(`lastOffset`)
 
     console.log(`server /shape:id`, {
-      lsn,
+      offset,
       isLive,
-      opsLogLength,
+      lastOffset,
       isCatchUp,
       query: req.query,
     })
 
-    if (lsn === -1) {
+    if (offset === -1) {
       console.log(`GET initial snapshot`)
-      const etag = lastSnapshotLSN
+      const etag = shape.get(`lastOffset`)
       res.set(`etag`, etag)
 
       // Check If-None-Match header for ETag validation
@@ -373,21 +346,26 @@ export async function createServer({
       if (ifNoneElse === etag.toString()) {
         return res.status(304).end() // Not Modified
       }
-      const snapshot = [
-        { lsn: 0, headers: { control: `start` } },
-        ...shape.get(`snapshot`).values(),
-        { headers: { control: `batch-done` } },
-      ]
 
-      return res.json(snapshot)
-    } else if (isCatchUp || lsn + 1 < opsLogLength) {
-      console.log(`GET catch-up`, { lsn, opsLogLength })
-      const slicedMessages = new Map()
-      const etag = shape.get(`lastLsn`)
+      // Streaming this would be more memory efficient.
+      const snapshot = []
+
       for (const { value } of lmdb.getRange({
         start: `${shapeId}-log-`,
         end: `${shapeId}-log-${MAX_VALUE}`,
-        offset: lsn + 1,
+      })) {
+        snapshot.push(value)
+      }
+
+      return res.json(snapshot)
+    } else if (isCatchUp || offset < lastOffset) {
+      console.log(`GET catch-up`, { offset, lastOffset })
+      const slicedMessages = new Map()
+      const etag = shape.get(`lastOffset`)
+      for (const { value } of lmdb.getRange({
+        start: `${shapeId}-log-`,
+        end: `${shapeId}-log-${MAX_VALUE}`,
+        offset: offset + 1,
       })) {
         slicedMessages.set(value.key, value)
       }
@@ -405,14 +383,14 @@ export async function createServer({
         { headers: { control: `batch-done` } },
       ])
     } else if (isLive) {
-      console.log(`GET live updates`, { lsn })
+      console.log(`GET live updates`, { offset })
       function close() {
         console.log(`closing live poll`)
-        openConnections.delete(reqId)
+        shape.get(`openConnections`).delete(reqId)
         res.status(204).end()
       }
 
-      openConnections.set(reqId, res)
+      shape.get(`openConnections`).set(reqId, res)
 
       const timeoutId = setTimeout(() => close, 30000) // Timeout after 30 seconds
 

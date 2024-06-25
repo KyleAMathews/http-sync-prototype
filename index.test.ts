@@ -176,14 +176,14 @@ describe(`HTTP Sync`, () => {
         if (message.headers?.hasOwnProperty(`action`)) {
           shapeData.set(message.key, message.value)
         }
-        if (message.lsn === 1) {
+        if (message.offset === 1) {
           updateRow({ id: rowId, title: `foo1` })
         }
-        if (message.lsn === 2) {
+        if (message.offset === 2) {
           secondRowId = await appendRow({ title: `foo2` })
         }
 
-        if (message.lsn === 3) {
+        if (message.offset === 3) {
           aborter.abort()
           expect(shapeData).toEqual(
             new Map([
@@ -221,11 +221,11 @@ describe(`HTTP Sync`, () => {
         if (message.headers?.hasOwnProperty(`action`)) {
           shapeData1.set(message.key, message.value)
         }
-        if (message.lsn === 3) {
+        if (message.offset === 3) {
           setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
         }
 
-        if (message.lsn === 4) {
+        if (message.offset === 4) {
           aborter1.abort()
           expect(shapeData1).toEqual(
             new Map([
@@ -244,7 +244,7 @@ describe(`HTTP Sync`, () => {
           shapeData2.set(message.key, message.value)
         }
 
-        if (message.lsn === 4) {
+        if (message.offset === 4) {
           aborter2.abort()
           expect(shapeData2).toEqual(
             new Map([
@@ -262,7 +262,7 @@ describe(`HTTP Sync`, () => {
 
   it(`can go offline and then catchup`, async () => {
     const aborter = new AbortController()
-    let lastLsn = 0
+    let lastOffset = 0
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
       subscribe: false,
@@ -270,8 +270,8 @@ describe(`HTTP Sync`, () => {
     })
     await new Promise((resolve) => {
       issueStream.subscribe((message) => {
-        if (message.lsn) {
-          lastLsn = Math.max(lastLsn, message.lsn)
+        if (message.offset) {
+          lastOffset = Math.max(lastOffset, message.offset)
         }
 
         if (message.headers?.[`control`] === `up-to-date`) {
@@ -303,7 +303,7 @@ describe(`HTTP Sync`, () => {
       shape: { table: `issues` },
       subscribe: true,
       signal: newAborter.signal,
-      lsn: lastLsn,
+      offset: lastOffset,
     })
     await new Promise((resolve) => {
       newIssueStream.subscribe((message) => {
@@ -321,7 +321,7 @@ describe(`HTTP Sync`, () => {
   })
 
   it(`should return correct caching headers`, async () => {
-    const res = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
+    const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
     const cacheHeaders = res.headers.get(`cache-control`)
     const directives = parse(cacheHeaders)
     expect(directives).toEqual({ "max-age": 60, "stale-while-revalidate": 300 })
@@ -337,7 +337,7 @@ describe(`HTTP Sync`, () => {
     // Wait for sqlite to get all the messages.
     await new Promise((resolve) => setTimeout(resolve, 40))
 
-    const res2 = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
+    const res2 = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
     const etag2 = parseInt(res2.headers.get(`etag`), 10)
     expect(etag2).toBeTypeOf(`number`)
     expect(etag).toBeLessThan(100)
@@ -345,7 +345,7 @@ describe(`HTTP Sync`, () => {
 
   it(`should return as uncachable if &live is set`, async () => {
     const res = await fetch(
-      `http://localhost:3000/shape/issues?lsn=10&live`,
+      `http://localhost:3000/shape/issues?offset=10&live`,
       {}
     )
     const cacheHeaders = res.headers.get(`cache-control`)
@@ -365,11 +365,11 @@ describe(`HTTP Sync`, () => {
   })
 
   it(`should revalidate etags`, async () => {
-    const res = await fetch(`http://localhost:3000/shape/issues?lsn=-1`, {})
+    const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
     const etag = res.headers.get(`etag`)
 
     const etagValidation = await fetch(
-      `http://localhost:3000/shape/issues?lsn=-1`,
+      `http://localhost:3000/shape/issues?offset=-1`,
       {
         headers: { "if-None-Else": etag },
       }
@@ -380,15 +380,15 @@ describe(`HTTP Sync`, () => {
 
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `http://localhost:3000/shape/issues?lsn=4`,
+      `http://localhost:3000/shape/issues?offset=4`,
       {}
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
 
-    // Catch-up LSNs should also use the same etag as they're
+    // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `http://localhost:3000/shape/issues?lsn=${etag}&catchup`,
+      `http://localhost:3000/shape/issues?offset=${etag}&catchup`,
       {
         headers: { "if-None-Else": catchupEtag },
       }
@@ -398,7 +398,6 @@ describe(`HTTP Sync`, () => {
   })
   it(`the client should be resiliant against network/server interuptions`, async () => {
     const { rowId } = context
-    const shapeData = new Map()
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
@@ -407,19 +406,19 @@ describe(`HTTP Sync`, () => {
     })
 
     const secondRowId = ``
-    let maxLsn = 0
-    let lsnBeforeUpdate = 10000
+    let maxOffset = 0
+    let offsetBeforeUpdate = 10000
     await new Promise((resolve) => {
       issueStream.subscribe(async (message) => {
-        if (typeof message.lsn === `number`) {
-          maxLsn = Math.max(maxLsn, message.lsn)
-          if (message.lsn > lsnBeforeUpdate) {
+        if (typeof message.offset === `number`) {
+          maxOffset = Math.max(maxOffset, message.offset)
+          if (message.offset > offsetBeforeUpdate) {
             aborter.abort()
             return resolve()
           }
         }
         if (message.headers?.[`control`] === `up-to-date`) {
-          lsnBeforeUpdate = maxLsn
+          offsetBeforeUpdate = maxOffset
           toggleNetworkConnectivity()
           updateRow({ id: rowId, title: `foo1` })
           await new Promise((resolve) => setTimeout(resolve, 50))

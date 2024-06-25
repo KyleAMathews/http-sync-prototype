@@ -18,7 +18,7 @@ export class ShapeStream {
   }
 
   private async startStream() {
-    let lastLSN = this.options.lsn || -1
+    let lastOffset = this.options.offset || -1
     let upToDate = false
     let pollCount = 0
 
@@ -34,14 +34,14 @@ export class ShapeStream {
       (!upToDate || this.options.subscribe)
     ) {
       pollCount += 1
-      let url = `http://localhost:3000/shape/${this.options.shape.table}?lsn=${lastLSN}`
+      let url = `http://localhost:3000/shape/${this.options.shape.table}?offset=${lastOffset}`
       if (pollCount === 2) {
         url += `&catchup`
       } else if (upToDate) {
         url += `&live`
       }
       console.log({
-        lastLSN,
+        lastOffset,
         upToDate,
         pollCount,
         url,
@@ -64,8 +64,8 @@ export class ShapeStream {
           .then((data: Message[]) => {
             this.publishBatch(data)
             data.forEach((message) => {
-              if (typeof message.lsn !== `undefined`) {
-                lastLSN = Math.max(lastLSN, message.lsn)
+              if (typeof message.offset !== `undefined`) {
+                lastOffset = Math.max(lastOffset, message.offset)
               }
               if (message.headers?.[`control`] === `up-to-date`) {
                 upToDate = true
