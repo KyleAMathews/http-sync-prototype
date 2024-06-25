@@ -58,12 +58,9 @@ async function getShape({ db, shapeId }) {
     let lsn = 0
     // Add the initial start control message.
     lmdb.putSync(`${shapeId}-log-${padNumber(lsn)}`, {
-      headers: [
-        {
-          key: `control`,
-          value: `start`,
-        },
-      ],
+      headers: {
+        control: `start`,
+      },
       lsn,
     })
 
@@ -74,7 +71,7 @@ async function getShape({ db, shapeId }) {
         key: row.id,
         lsn,
         value: { ...row },
-        headers: [{ key: `action`, value: `insert` }],
+        headers: { action: `insert` },
       }
       data.set(row.id, row)
       snapshot.set(row.id, log)
@@ -108,7 +105,7 @@ async function getShape({ db, shapeId }) {
           lastSnapshotLSN = lastLsn
           return opWithLsn
         })
-        opsWithLSN.push({ headers: [{ key: `control`, value: `batch-done` }] })
+        opsWithLSN.push({ headers: { control: `batch-done` } })
 
         openConnections.forEach((res) => {
           res.json(opsWithLSN)
@@ -122,17 +119,9 @@ async function getShape({ db, shapeId }) {
         })
 
         opsWithLSN.forEach((message) => {
-          if (
-            message.headers?.some(
-              ({ key, value }) => key === `action` && value !== `delete`
-            )
-          ) {
+          if (message.headers?.[`action`] !== `delete`) {
             snapshot.set(message.key, message)
-          } else if (
-            message.headers?.some(
-              ({ key, value }) => key === `action` && value === `delete`
-            )
-          ) {
+          } else if (message.headers?.[`action`] === `delete`) {
             snapshot.delete(message.key)
           }
         })
@@ -239,14 +228,14 @@ function diffMaps(map1, map2) {
       // If the key no longer exists in map2
       messages.push({
         key: key,
-        headers: [{ key: `action`, value: `delete` }],
+        headers: { action: `delete` },
       })
     } else if (!deepEqual(map2.get(key), value)) {
       // If the key exists but the value is different
       messages.push({
         key,
         value: map2.get(key),
-        headers: [{ key: `action`, value: `update` }],
+        headers: { action: `update` },
       })
     }
   }
@@ -258,7 +247,7 @@ function diffMaps(map1, map2) {
       messages.push({
         key,
         value,
-        headers: [{ key: `action`, value: `insert` }],
+        headers: { action: `insert` },
       })
     }
   }
@@ -385,9 +374,9 @@ export async function createServer({
         return res.status(304).end() // Not Modified
       }
       const snapshot = [
-        { lsn: 0, headers: [{ key: `control`, value: `start` }] },
+        { lsn: 0, headers: { control: `start` } },
         ...shape.get(`snapshot`).values(),
-        { headers: [{ key: `control`, value: `batch-done` }] },
+        { headers: { control: `batch-done` } },
       ]
 
       return res.json(snapshot)
@@ -412,8 +401,8 @@ export async function createServer({
 
       return res.json([
         ...slicedMessages.values(),
-        { headers: [{ key: `control`, value: `up-to-date` }] },
-        { headers: [{ key: `control`, value: `batch-done` }] },
+        { headers: { control: `up-to-date` } },
+        { headers: { control: `batch-done` } },
       ])
     } else if (isLive) {
       console.log(`GET live updates`, { lsn })

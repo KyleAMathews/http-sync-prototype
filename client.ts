@@ -55,6 +55,10 @@ export class ShapeStream {
               throw new Error(`HTTP error! Status: ${response.status}`)
             }
             attempt = 0
+            if (response.status === 204) {
+              return []
+            }
+
             return response.json()
           })
           .then((data: Message[]) => {
@@ -63,12 +67,7 @@ export class ShapeStream {
               if (typeof message.lsn !== `undefined`) {
                 lastLSN = Math.max(lastLSN, message.lsn)
               }
-              if (
-                message.headers?.some(
-                  ({ key, value }) =>
-                    key === `control` && value === `up-to-date`
-                )
-              ) {
+              if (message.headers?.[`control`] === `up-to-date`) {
                 upToDate = true
               }
               if (!this.options.signal?.aborted) {

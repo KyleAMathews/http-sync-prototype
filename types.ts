@@ -7,6 +7,6 @@ type Header = {
 export type Message = {
   key?: any
   value?: any
-  headers?: Header[]
+  headers?: Header
   lsn?: number
 }
