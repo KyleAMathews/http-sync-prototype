@@ -61,7 +61,7 @@ afterAll(async () => {
 })
 
 describe(`HTTP Sync`, () => {
-  it(`should work with empty shapes`, async () => {
+  it(`should work with empty shape/table`, async () => {
     // Get initial data
     const shapeData = new Map()
     const aborter = new AbortController()
@@ -86,6 +86,7 @@ describe(`HTTP Sync`, () => {
 
     expect(values).toHaveLength(0)
   })
+
   it(`should get initial data`, async () => {
     const { client } = context
     // Add an initial row.
@@ -128,6 +129,7 @@ describe(`HTTP Sync`, () => {
     expect(values).toHaveLength(1)
     expect(values[0].title).toEqual(`foo`)
   })
+
   it(`should get initial data for a second table`, async () => {
     const { client } = context
 
@@ -154,9 +156,11 @@ describe(`HTTP Sync`, () => {
     const values = [...shapeData.values()]
 
     expect(values).toHaveLength(1)
+    console.log({ values })
     expect(values[0].title).toEqual(`I AM FOO TABLE`)
   })
-  it(`should get initial data and then receive messages`, async () => {
+
+  it(`should get initial data and then receive updates`, async () => {
     const { rowId } = context
     const shapeData = new Map()
     const aborter = new AbortController()
@@ -388,7 +392,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `http://localhost:3000/shape/issues?offset=${etag}&catchup`,
+      `http://localhost:3000/shape/issues?offset=${etag}&notLive`,
       {
         headers: { "if-None-Else": catchupEtag },
       }

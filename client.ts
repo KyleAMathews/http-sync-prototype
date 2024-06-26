@@ -35,10 +35,10 @@ export class ShapeStream {
     ) {
       pollCount += 1
       let url = `http://localhost:3000/shape/${this.options.shape.table}?offset=${lastOffset}`
-      if (pollCount === 2) {
-        url += `&catchup`
-      } else if (upToDate) {
+      if (upToDate) {
         url += `&live`
+      } else {
+        url += `&notLive`
       }
       console.log({
         lastOffset,
@@ -76,10 +76,13 @@ export class ShapeStream {
             })
           })
       } catch (e) {
-        if (e.message !== `This operation was aborted`) {
+        if (this.options.signal?.aborted) {
+          // Break out of while loop when the user aborts the client.
+          break
+        } else {
           console.log(`fetch failed`, e)
-          // Exponentially backoff on errors.
 
+          // Exponentially backoff on errors.
           // Wait for the current delay duration
           await new Promise((resolve) => setTimeout(resolve, delay))
 
@@ -88,9 +91,6 @@ export class ShapeStream {
 
           attempt++
           console.log(`Retry attempt #${attempt} after ${delay}ms`)
-        } else {
-          // Break out of while loop when the user aborts the client.
-          break
         }
       }
     }

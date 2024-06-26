@@ -13,7 +13,7 @@ var ShapeStream = class {
     });
   }
   async startStream() {
-    var _a;
+    var _a, _b;
     let lastOffset = this.options.offset || -1;
     let upToDate = false;
     let pollCount = 0;
@@ -24,10 +24,10 @@ var ShapeStream = class {
     while (!((_a = this.options.signal) == null ? void 0 : _a.aborted) && (!upToDate || this.options.subscribe)) {
       pollCount += 1;
       let url = `http://localhost:3000/shape/${this.options.shape.table}?offset=${lastOffset}`;
-      if (pollCount === 2) {
-        url += `&catchup`;
-      } else if (upToDate) {
+      if (upToDate) {
         url += `&live`;
+      } else {
+        url += `&notLive`;
       }
       console.log({
         lastOffset,
@@ -50,27 +50,27 @@ var ShapeStream = class {
         }).then((data) => {
           this.publishBatch(data);
           data.forEach((message) => {
-            var _a2, _b;
+            var _a2, _b2;
             if (typeof message.offset !== `undefined`) {
               lastOffset = Math.max(lastOffset, message.offset);
             }
             if (((_a2 = message.headers) == null ? void 0 : _a2[`control`]) === `up-to-date`) {
               upToDate = true;
             }
-            if (!((_b = this.options.signal) == null ? void 0 : _b.aborted)) {
+            if (!((_b2 = this.options.signal) == null ? void 0 : _b2.aborted)) {
               this.publish(message);
             }
           });
         });
       } catch (e) {
-        if (e.message !== `This operation was aborted`) {
+        if ((_b = this.options.signal) == null ? void 0 : _b.aborted) {
+          break;
+        } else {
           console.log(`fetch failed`, e);
           await new Promise((resolve) => setTimeout(resolve, delay));
           delay = Math.min(delay * 1.3, maxDelay);
           attempt++;
           console.log(`Retry attempt #${attempt} after ${delay}ms`);
-        } else {
-          break;
         }
       }
     }

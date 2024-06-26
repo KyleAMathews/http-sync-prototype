@@ -94,9 +94,10 @@ async function getShape({ db, shapeId }) {
     const shape = new Map()
     const data = new Map()
     shapes.set(shapeId, shape)
-    const shapeSync = await db[shapeId].sync()
-    await shapeSync.synced
-    const liveQuery = await db[shapeId].liveMany()
+    if (!db[shapeId]) {
+      throw new Error(`shapeId not found on db — ${shapeId}`)
+    }
+    const res = await db[shapeId].findMany()
 
     let offset = 0
     // Add the initial start control message.
@@ -107,8 +108,7 @@ async function getShape({ db, shapeId }) {
       offset,
     })
 
-    const res = await liveQuery()
-    res.result.forEach((row) => {
+    res.forEach((row) => {
       offset += 1
       const log = {
         key: row.id,
@@ -314,7 +314,7 @@ export async function createServer({
   app.get(`/shape/:id`, async (req: Request, res: Response) => {
     const offset = parseInt(req.query.offset, 10)
     const isLive = `live` in req.query && req.query.live !== false
-    const isCatchUp = `catchup` in req.query && req.query.catchup !== false
+    const isCatchUp = `notLive` in req.query && req.query.notLive !== false
 
     // Set caching headers.
     if (isLive) {
