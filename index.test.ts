@@ -51,8 +51,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   console.log(`afterAll`)
+  // TODO need some way to reset server state — or is that necessary?
   context.server.express.close()
   context.server.electric.disconnect()
+  // TODO remove this.
   deleteDb()
   await context.client.query(`TRUNCATE TABLE issues`)
   await context.client.query(`TRUNCATE TABLE foo`)

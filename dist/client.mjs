@@ -1,4 +1,25 @@
 // client.ts
+var Subscriber = class {
+  constructor(callback) {
+    this.messageQueue = [];
+    this.isProcessing = false;
+    this.callback = callback;
+  }
+  enqueueMessage(messages) {
+    this.messageQueue.push(messages);
+    if (!this.isProcessing) {
+      this.processQueue();
+    }
+  }
+  async processQueue() {
+    this.isProcessing = true;
+    while (this.messageQueue.length > 0) {
+      const messages = this.messageQueue.shift();
+      await this.callback(messages);
+    }
+    this.isProcessing = false;
+  }
+};
 var ShapeStream = class {
   constructor(options) {
     this.subscribers = [];
@@ -93,14 +114,15 @@ var ShapeStream = class {
       }
     }
     console.log(`client is closed`, this.instanceId);
-    this.outsideResolve();
+    this.outsideResolve && this.outsideResolve();
   }
   subscribe(callback) {
-    this.subscribers.push(callback);
+    const subscriber = new Subscriber(callback);
+    this.subscribers.push(subscriber);
   }
   publish(messages) {
     for (const subscriber of this.subscribers) {
-      subscriber(messages);
+      subscriber.enqueueMessage(messages);
     }
   }
 };

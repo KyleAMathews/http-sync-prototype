@@ -8,8 +8,34 @@ interface ShapeStreamOptions {
   offset?: number
 }
 
+class Subscriber {
+  private messageQueue: Message[][] = []
+  private isProcessing = false
+  private callback: (messages: Message[]) => Promise<void>
+
+  constructor(callback: (messages: Message[]) => Promise<void>) {
+    this.callback = callback
+  }
+
+  enqueueMessage(messages: Message[]) {
+    this.messageQueue.push(messages)
+    if (!this.isProcessing) {
+      this.processQueue()
+    }
+  }
+
+  private async processQueue() {
+    this.isProcessing = true
+    while (this.messageQueue.length > 0) {
+      const messages = this.messageQueue.shift()!
+      await this.callback(messages)
+    }
+    this.isProcessing = false
+  }
+}
+
 export class ShapeStream {
-  private subscribers: ((messages: Message[]) => void)[] = []
+  private subscribers: Array<Subscriber> = []
   private instanceId: number
   private closedPromise: Promise<unknown>
   private outsideResolve?: (value?: unknown) => void
@@ -134,16 +160,17 @@ export class ShapeStream {
     }
 
     console.log(`client is closed`, this.instanceId)
-    this.outsideResolve()
+    this.outsideResolve && this.outsideResolve()
   }
 
-  subscribe(callback: (messages: Message[]) => void) {
-    this.subscribers.push(callback)
+  subscribe(callback: (messages: Message[]) => Promise<void>) {
+    const subscriber = new Subscriber(callback)
+    this.subscribers.push(subscriber)
   }
 
   publish(messages: Message[]) {
     for (const subscriber of this.subscribers) {
-      subscriber(messages)
+      subscriber.enqueueMessage(messages)
     }
   }
 }
