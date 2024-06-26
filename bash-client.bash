@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# URL to download the JSON file from (without the lsn parameter)
+# URL to download the JSON file from (without the output parameter)
 BASE_URL="http://localhost:3000/shape/todos"
 
 # Directory to store individual JSON files
-OUTPUT_DIR="./json_files"
+OFFSET_DIR="./json_files"
 
-# Initialize the latest lsn variable
-LATEST_LSN="-1"
+# Initialize the latest output variable
+LATEST_OFFSET="-1"
 
 # Create the output directory if it doesn't exist
-mkdir -p "$OUTPUT_DIR"
+mkdir -p "$OFFSET_DIR"
 
 # Function to download and process JSON data
 process_json() {
@@ -29,8 +29,8 @@ process_json() {
     # Check if the file is not empty
     if [ ! -s "$output_file" ]; then
         echo >&2 "The downloaded JSON file is empty."
-        # Return the latest LSN
-        echo "$LATEST_LSN"
+        # Return the latest OFFSET
+        echo "$LATEST_OFFSET"
         return
     fi
 
@@ -56,32 +56,32 @@ process_json() {
         fi
 
         key=$(echo "$line" | jq -r '.key')
-        lsn=$(echo "$line" | jq -r '.lsn')
+        offset=$(echo "$line" | jq -r '.offset')
 
         if [ -z "$key" ]; then
             echo >&2 "No key found in message: $line"  # Log if no ID is found
         else
             echo >&2 "Extracted key: $key"  # Log the extracted key
-            echo "$line" | jq . > "$OUTPUT_DIR/json_object_$key.json"
-            echo >&2 "Written to file: $OUTPUT_DIR/json_object_$key.json"  # Log file creation
+            echo "$line" | jq . > "$OFFSET_DIR/json_object_$key.json"
+            echo >&2 "Written to file: $OFFSET_DIR/json_object_$key.json"  # Log file creation
 
-            LATEST_LSN="$lsn"
-            echo >&2 "Updated latest LSN to: $LATEST_LSN"
+            LATEST_OFFSET="$offset"
+            echo >&2 "Updated latest OFFSET to: $LATEST_OFFSET"
         fi
     done < <(jq -c '.[]' "$output_file") 
 
-    echo >&2 "done with jq/read loop $LATEST_LSN"
+    echo >&2 "done with jq/read loop $LATEST_OFFSET"
 
-    # Return the latest LSN
-    echo "$LATEST_LSN"
+    # Return the latest OFFSET
+    echo "$LATEST_OFFSET"
 }
 
 # Main loop to poll for updates every second
 while true; do
-    url="$BASE_URL?lsn=$LATEST_LSN"
+    url="$BASE_URL?offset=$LATEST_OFFSET"
     echo $url
 
-    LATEST_LSN=$(process_json "$url" "shape-data.json")
+    LATEST_OFFSET=$(process_json "$url" "shape-data.json")
 
     sleep 1
 done

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ShapeStream } from "./dist/client"
+import { ShapeStream } from "./client"
 import { Message } from "./types"
 
 export function useShape(config) {
@@ -38,7 +38,7 @@ export function useShape(config) {
             upToDate = true
           }
         })
-        if (messages.length > 0) {
+        if (upToDate && messages.length > 0) {
           updateSubscribers()
         }
       })
