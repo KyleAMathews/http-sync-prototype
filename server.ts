@@ -11,6 +11,11 @@ import { v4 as uuidv4 } from "uuid"
 import pg from "pg"
 const { Client } = pg
 import { Message } from "./types"
+import crypto from "crypto"
+
+function hashString(inputString, algorithm = `sha256`) {
+  return crypto.createHash(algorithm).update(inputString).digest(`hex`)
+}
 
 function unsignedJWT(userId, customClaims) {
   const claims = customClaims || {}
@@ -32,6 +37,10 @@ client.connect()
 
 const shapes = new Map()
 const shapesSetupPromise = new Map()
+
+export function deleteShape(shapeId) {
+  shapes.delete(shapeId)
+}
 
 function padNumber(num) {
   return num.toString().padStart(10, `0`)
@@ -72,7 +81,7 @@ async function setupSyncing(db) {
           })
 
           // Get shape (there's only one per table right now).
-          const shape = await getShape({ db, shapeId: key })
+          const shape = await getShape({ db, shapeTable: key })
           shape.get(`appendToShapeLog`)({ messages })
           data = newData
         }
@@ -80,28 +89,31 @@ async function setupSyncing(db) {
     }
   })
 }
-async function getShape({ db, shapeId }) {
-  if (shapes.has(shapeId) && !shapesSetupPromise.has(shapeId)) {
-    return shapes.get(shapeId)
-  } else if (shapesSetupPromise.has(shapeId)) {
-    return shapesSetupPromise.get(shapeId)
+async function getShape({ db, shapeTable = `` }) {
+  if (shapes.has(shapeTable) && !shapesSetupPromise.has(shapeTable)) {
+    return shapes.get(shapeTable)
+  } else if (shapesSetupPromise.has(shapeTable)) {
+    return shapesSetupPromise.get(shapeTable)
   } else {
     let outsideResolve
     const setupPromise = new Promise((resolve) => {
       outsideResolve = resolve
     })
-    shapesSetupPromise.set(shapeId, setupPromise)
+    shapesSetupPromise.set(shapeTable, setupPromise)
     const shape = new Map()
+    shape.set(`created_at`, new Date().toJSON())
+    const id = hashString(`${shape.get(`created_at`)}-${shapeTable}`, `md5`)
+    shape.set(`id`, id)
     const data = new Map()
-    shapes.set(shapeId, shape)
-    if (!db[shapeId]) {
-      throw new Error(`shapeId not found on db — ${shapeId}`)
+    shapes.set(shapeTable, shape)
+    if (!db[shapeTable]) {
+      throw new Error(`shapeTable not found on db — ${shapeTable}`)
     }
-    const res = await db[shapeId].findMany()
+    const res = await db[shapeTable].findMany()
 
     let offset = 0
     // Add the initial start control message.
-    lmdb.putSync(`${shapeId}-log-${padNumber(offset)}`, {
+    lmdb.putSync(`${shapeTable}-log-${padNumber(offset)}`, {
       headers: {
         control: `start`,
       },
@@ -118,7 +130,7 @@ async function getShape({ db, shapeId }) {
       }
       data.set(row.id, row)
       if (log.offset) {
-        lmdb.putSync(`${shapeId}-log-${padNumber(offset)}`, log)
+        lmdb.putSync(`${shapeTable}-log-${padNumber(offset)}`, log)
       }
     })
 
@@ -131,7 +143,10 @@ async function getShape({ db, shapeId }) {
       const messagesWithOffset = messages.map((message) => {
         offset += 1
         const messageWithOffset = { ...message, offset }
-        lmdb.putSync(`${shapeId}-log-${padNumber(offset)}`, messageWithOffset)
+        lmdb.putSync(
+          `${shapeTable}-log-${padNumber(offset)}`,
+          messageWithOffset
+        )
         return messageWithOffset
       })
       const openConnections = shape.get(`openConnections`)
@@ -146,11 +161,10 @@ async function getShape({ db, shapeId }) {
       shape.set(`openConnections`, openConnections)
 
       shape.set(`lastOffset`, offset)
-      console.log({ shape })
     })
 
     outsideResolve(shape)
-    shapesSetupPromise.delete(shapeId)
+    shapesSetupPromise.delete(shapeTable)
     return shape
   }
 }
@@ -266,10 +280,41 @@ export async function createServer({
   addRoutes(app)
 
   // Endpoint to get initial data and subscribe to updates
-  app.get(`/shape/:id`, async (req: Request, res: Response) => {
-    const offset = parseInt(req.query.offset, 10)
+  app.get(`/shape/:table`, async (req: Request, res: Response) => {
+    let offset = parseInt(req.query.offset, 10)
+    if (!Number.isFinite(offset)) {
+      offset = -1
+    }
     const isLive = `live` in req.query && req.query.live !== false
     const isCatchUp = `notLive` in req.query && req.query.notLive !== false
+    const shapeIdHeader = req.query.shapeId
+
+    const reqId = Math.random()
+    const shapeTable = req.params.table
+    const shape = await getShape({ db, shapeTable })
+
+    const lastOffset = shape.get(`lastOffset`)
+    const shapeId = shape.get(`id`)
+
+    console.log(`server /shape:id`, {
+      offset,
+      isLive,
+      lastOffset,
+      isCatchUp,
+      query: req.query,
+    })
+
+    // Validation
+    if (!shape) {
+      return res.status(404).json({ error: `Shape not found` })
+    }
+
+    if (offset !== -1 && shapeId !== shapeIdHeader) {
+      return res.json([{ headers: { control: `must-refetch` } }])
+    }
+
+    // Set shape header.
+    res.set(`x-electric-shape-id`, shape.get(`id`))
 
     // Set caching headers.
     if (isLive) {
@@ -279,20 +324,6 @@ export async function createServer({
     } else {
       res.set(`Cache-Control`, `max-age=60, stale-while-revalidate=300`)
     }
-
-    const reqId = Math.random()
-    const shapeId = req.params.id
-    const shape = await getShape({ db, shapeId })
-
-    const lastOffset = shape.get(`lastOffset`)
-
-    console.log(`server /shape:id`, {
-      offset,
-      isLive,
-      lastOffset,
-      isCatchUp,
-      query: req.query,
-    })
 
     if (offset === -1) {
       console.log(`GET initial snapshot`)
@@ -309,8 +340,8 @@ export async function createServer({
       const snapshot = []
 
       for (const { value } of lmdb.getRange({
-        start: `${shapeId}-log-`,
-        end: `${shapeId}-log-${MAX_VALUE}`,
+        start: `${shapeTable}-log-`,
+        end: `${shapeTable}-log-${MAX_VALUE}`,
       })) {
         snapshot.push(value)
       }
@@ -321,8 +352,8 @@ export async function createServer({
       const slicedMessages = new Map()
       const etag = shape.get(`lastOffset`)
       for (const { value } of lmdb.getRange({
-        start: `${shapeId}-log-`,
-        end: `${shapeId}-log-${MAX_VALUE}`,
+        start: `${shapeTable}-log-`,
+        end: `${shapeTable}-log-${MAX_VALUE}`,
         offset: offset + 1,
       })) {
         slicedMessages.set(value.key, value)
