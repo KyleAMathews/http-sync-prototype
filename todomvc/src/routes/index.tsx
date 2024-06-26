@@ -13,7 +13,10 @@ import { useOptimistic } from "react"
 import { v4 as uuidv4 } from "uuid"
 
 export default function Index() {
-  const todos = useShape({ shape: { table: `todos` }, subscribe: true })
+  const todos = useShape({
+    shape: { table: `todos` },
+    baseUrl: `http://localhost:3000`,
+  })
   todos.sort((a, b) => a.created_at - b.created_at)
   console.log({ todos })
   return (

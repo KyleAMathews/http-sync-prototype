@@ -1,13 +1,25 @@
-const baseUrl = `http://localhost:3000`
 import { Message } from "./types"
+
+interface ShapeStreamOptions {
+  shape: { table: string }
+  baseUrl: string
+  subscribe?: boolean
+  signal?: AbortSignal
+  offset?: number
+}
 
 export class ShapeStream {
   private subscribers: ((message: Message) => void)[] = []
   private batchSubscribers: ((messages: Message[]) => void)[] = []
+  private instanceId: number
+  private closedPromise: Promise<unknown>
+  private outsideResolve?: (value?: unknown) => void
+  options: ShapeStreamOptions
 
-  constructor(options = { subscribe: true }) {
+  constructor(options: ShapeStreamOptions) {
+    this.validateOptions(options)
     this.instanceId = Math.random()
-    this.options = options
+    this.options = { subscribe: true, ...options }
     console.log(`constructor`, this)
     this.startStream()
 
@@ -15,6 +27,27 @@ export class ShapeStream {
     this.closedPromise = new Promise((resolve) => {
       this.outsideResolve = resolve
     })
+  }
+
+  private validateOptions(options: ShapeStreamOptions): void {
+    if (
+      !options.shape ||
+      !options.shape.table ||
+      typeof options.shape.table !== `string`
+    ) {
+      throw new Error(
+        `Invalid shape option. It must be an object with a "table" property that is a string.`
+      )
+    }
+    if (!options.baseUrl) {
+      throw new Error(`Invalid shape option. It must provide the baseUrl`)
+    }
+    if (options.signal && !(options.signal instanceof AbortSignal)) {
+      throw new Error(
+        `Invalid signal option. It must be an instance of AbortSignal.`
+      )
+    }
+    // Add more validation rules as needed
   }
 
   private async startStream() {
@@ -34,20 +67,23 @@ export class ShapeStream {
       (!upToDate || this.options.subscribe)
     ) {
       pollCount += 1
-      let url = `http://localhost:3000/shape/${this.options.shape.table}?offset=${lastOffset}`
+      const url = new URL(
+        `${this.options.baseUrl}/shape/${this.options.shape.table}`
+      )
+      url.searchParams.set(`offset`, lastOffset.toString())
       if (upToDate) {
-        url += `&live`
+        url.searchParams.set(`live`, ``)
       } else {
-        url += `&notLive`
+        url.searchParams.set(`notLive`, ``)
       }
       console.log({
         lastOffset,
         upToDate,
         pollCount,
-        url,
+        url: url.toString(),
       })
       try {
-        await fetch(url, {
+        await fetch(url.toString(), {
           signal: this.options.signal ? this.options.signal : undefined,
         })
           .then(async (response) => {

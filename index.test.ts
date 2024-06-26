@@ -67,6 +67,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
+      baseUrl: `http://localhost:3000`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -109,6 +110,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
+      baseUrl: `http://localhost:3000`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -138,6 +140,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const fooStream = new ShapeStream({
       shape: { table: `foo` },
+      baseUrl: `http://localhost:3000`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -166,6 +169,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
+      baseUrl: `http://localhost:3000`,
       subscribe: true,
       signal: aborter.signal,
     })
@@ -208,6 +212,7 @@ describe(`HTTP Sync`, () => {
     const aborter1 = new AbortController()
     const issueStream1 = new ShapeStream({
       shape: { table: `issues` },
+      baseUrl: `http://localhost:3000`,
       subscribe: true,
       signal: aborter1.signal,
     })
@@ -216,6 +221,7 @@ describe(`HTTP Sync`, () => {
     const aborter2 = new AbortController()
     const issueStream2 = new ShapeStream({
       shape: { table: `issues` },
+      baseUrl: `http://localhost:3000`,
       subscribe: true,
       signal: aborter2.signal,
     })
@@ -269,6 +275,7 @@ describe(`HTTP Sync`, () => {
     let lastOffset = 0
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
+      baseUrl: `http://localhost:3000`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -305,6 +312,7 @@ describe(`HTTP Sync`, () => {
     const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
       shape: { table: `issues` },
+      baseUrl: `http://localhost:3000`,
       subscribe: true,
       signal: newAborter.signal,
       offset: lastOffset,
@@ -405,6 +413,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
+      baseUrl: `http://localhost:3000`,
       subscribe: true,
       signal: aborter.signal,
     })

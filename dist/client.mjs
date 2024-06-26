@@ -1,16 +1,32 @@
 // client.ts
 var ShapeStream = class {
-  constructor(options = { subscribe: true }) {
+  constructor(options) {
     this.subscribers = [];
     this.batchSubscribers = [];
+    this.validateOptions(options);
     this.instanceId = Math.random();
-    this.options = options;
+    this.options = { subscribe: true, ...options };
     console.log(`constructor`, this);
     this.startStream();
     this.outsideResolve;
     this.closedPromise = new Promise((resolve) => {
       this.outsideResolve = resolve;
     });
+  }
+  validateOptions(options) {
+    if (!options.shape || !options.shape.table || typeof options.shape.table !== `string`) {
+      throw new Error(
+        `Invalid shape option. It must be an object with a "table" property that is a string.`
+      );
+    }
+    if (!options.baseUrl) {
+      throw new Error(`Invalid shape option. It must provide the baseUrl`);
+    }
+    if (options.signal && !(options.signal instanceof AbortSignal)) {
+      throw new Error(
+        `Invalid signal option. It must be an instance of AbortSignal.`
+      );
+    }
   }
   async startStream() {
     var _a, _b;
@@ -23,20 +39,23 @@ var ShapeStream = class {
     let delay = initialDelay;
     while (!((_a = this.options.signal) == null ? void 0 : _a.aborted) && (!upToDate || this.options.subscribe)) {
       pollCount += 1;
-      let url = `http://localhost:3000/shape/${this.options.shape.table}?offset=${lastOffset}`;
+      const url = new URL(
+        `${this.options.baseUrl}/shape/${this.options.shape.table}`
+      );
+      url.searchParams.set(`offset`, lastOffset.toString());
       if (upToDate) {
-        url += `&live`;
+        url.searchParams.set(`live`, ``);
       } else {
-        url += `&notLive`;
+        url.searchParams.set(`notLive`, ``);
       }
       console.log({
         lastOffset,
         upToDate,
         pollCount,
-        url
+        url: url.toString()
       });
       try {
-        await fetch(url, {
+        await fetch(url.toString(), {
           signal: this.options.signal ? this.options.signal : void 0
         }).then(async (response) => {
           if (!response.ok) {
