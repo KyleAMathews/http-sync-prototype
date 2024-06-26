@@ -2,7 +2,6 @@
 var ShapeStream = class {
   constructor(options) {
     this.subscribers = [];
-    this.batchSubscribers = [];
     this.validateOptions(options);
     this.instanceId = Math.random();
     this.options = { subscribe: true, ...options };
@@ -38,7 +37,6 @@ var ShapeStream = class {
     const initialDelay = 100;
     let delay = initialDelay;
     while (!((_a = this.options.signal) == null ? void 0 : _a.aborted) && (!upToDate || this.options.subscribe)) {
-      pollCount += 1;
       const url = new URL(
         `${this.options.baseUrl}/shape/${this.options.shape.table}`
       );
@@ -66,20 +64,21 @@ var ShapeStream = class {
             return [];
           }
           return response.json();
-        }).then((data) => {
-          this.publishBatch(data);
-          data.forEach((message) => {
-            var _a2, _b2;
-            if (typeof message.offset !== `undefined`) {
-              lastOffset = Math.max(lastOffset, message.offset);
-            }
-            if (((_a2 = message.headers) == null ? void 0 : _a2[`control`]) === `up-to-date`) {
-              upToDate = true;
-            }
-            if (!((_b2 = this.options.signal) == null ? void 0 : _b2.aborted)) {
-              this.publish(message);
-            }
-          });
+        }).then((batch) => {
+          this.publish(batch);
+          if (batch.length > 0) {
+            const lastMessages = batch.slice(-2);
+            lastMessages.forEach((message) => {
+              var _a2;
+              if (((_a2 = message.headers) == null ? void 0 : _a2[`control`]) === `up-to-date`) {
+                upToDate = true;
+              }
+              if (typeof message.offset !== `undefined`) {
+                lastOffset = message.offset;
+              }
+            });
+          }
+          pollCount += 1;
         });
       } catch (e) {
         if ((_b = this.options.signal) == null ? void 0 : _b.aborted) {
@@ -99,16 +98,8 @@ var ShapeStream = class {
   subscribe(callback) {
     this.subscribers.push(callback);
   }
-  publish(message) {
+  publish(messages) {
     for (const subscriber of this.subscribers) {
-      subscriber(message);
-    }
-  }
-  subscribeBatch(callback) {
-    this.batchSubscribers.push(callback);
-  }
-  publishBatch(messages) {
-    for (const subscriber of this.batchSubscribers) {
       subscriber(messages);
     }
   }

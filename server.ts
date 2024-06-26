@@ -136,7 +136,7 @@ async function getShape({ db, shapeId }) {
       })
       const openConnections = shape.get(`openConnections`)
 
-      messagesWithOffset.push({ headers: { control: `batch-done` } })
+      messagesWithOffset.push({ headers: { control: `up-to-date` } })
 
       openConnections.forEach((res) => {
         res.json(messagesWithOffset)
@@ -383,7 +383,6 @@ export async function createServer({
       return res.json([
         ...slicedMessages.values(),
         { headers: { control: `up-to-date` } },
-        { headers: { control: `batch-done` } },
       ])
     } else if (isLive) {
       console.log(`GET live updates`, { offset })

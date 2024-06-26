@@ -73,14 +73,16 @@ describe(`HTTP Sync`, () => {
     })
 
     await new Promise((resolve) => {
-      issueStream.subscribe((message) => {
-        if (message.headers?.hasOwnProperty(`action`)) {
-          shapeData.set(message.key, message.value)
-        }
-        if (message.headers?.[`control`] === `up-to-date`) {
-          aborter.abort()
-          return resolve()
-        }
+      issueStream.subscribe((messages) => {
+        messages.forEach((message) => {
+          if (message.headers?.hasOwnProperty(`action`)) {
+            shapeData.set(message.key, message.value)
+          }
+          if (message.headers?.[`control`] === `up-to-date`) {
+            aborter.abort()
+            return resolve()
+          }
+        })
       })
     })
     const values = [...shapeData.values()]
@@ -116,14 +118,16 @@ describe(`HTTP Sync`, () => {
     })
 
     await new Promise((resolve) => {
-      issueStream.subscribe((message) => {
-        if (message.headers?.hasOwnProperty(`action`)) {
-          shapeData.set(message.key, message.value)
-        }
-        if (message.headers?.[`control`] === `up-to-date`) {
-          aborter.abort()
-          return resolve()
-        }
+      issueStream.subscribe((messages) => {
+        messages.forEach((message) => {
+          if (message.headers?.hasOwnProperty(`action`)) {
+            shapeData.set(message.key, message.value)
+          }
+          if (message.headers?.[`control`] === `up-to-date`) {
+            aborter.abort()
+            return resolve()
+          }
+        })
       })
     })
     const values = [...shapeData.values()]
@@ -146,14 +150,16 @@ describe(`HTTP Sync`, () => {
     })
 
     await new Promise((resolve) => {
-      fooStream.subscribe((message) => {
-        if (message.headers?.hasOwnProperty(`action`)) {
-          shapeData.set(message.key, message.value)
-        }
-        if (message.headers?.[`control`] === `up-to-date`) {
-          aborter.abort()
-          return resolve()
-        }
+      fooStream.subscribe((messages) => {
+        messages.forEach(async (message) => {
+          if (message.headers?.hasOwnProperty(`action`)) {
+            shapeData.set(message.key, message.value)
+          }
+          if (message.headers?.[`control`] === `up-to-date`) {
+            aborter.abort()
+            return resolve()
+          }
+        })
       })
     })
     const values = [...shapeData.values()]
@@ -177,31 +183,33 @@ describe(`HTTP Sync`, () => {
     let secondRowId = ``
     let batchDoneCount = 0
     await new Promise((resolve) => {
-      issueStream.subscribe(async (message) => {
-        if (message.headers?.[`control`] === `batch-done`) {
-          batchDoneCount += 1
-        }
-        if (message.headers?.hasOwnProperty(`action`)) {
-          shapeData.set(message.key, message.value)
-        }
-        if (message.offset === 1) {
-          updateRow({ id: rowId, title: `foo1` })
-        }
-        if (message.offset === 2) {
-          secondRowId = await appendRow({ title: `foo2` })
-        }
+      issueStream.subscribe((messages) => {
+        messages.forEach(async (message) => {
+          if (message.headers?.[`control`] === `batch-done`) {
+            batchDoneCount += 1
+          }
+          if (message.headers?.hasOwnProperty(`action`)) {
+            shapeData.set(message.key, message.value)
+          }
+          if (message.offset === 1) {
+            updateRow({ id: rowId, title: `foo1` })
+          }
+          if (message.offset === 2) {
+            secondRowId = await appendRow({ title: `foo2` })
+          }
 
-        if (message.offset === 3) {
-          aborter.abort()
-          expect(shapeData).toEqual(
-            new Map([
-              [rowId, { id: rowId, title: `foo1` }],
-              [secondRowId, { id: secondRowId, title: `foo2` }],
-            ])
-          )
-          // expect(batchDoneCount).toEqual(3)
-          resolve()
-        }
+          if (message.offset === 3) {
+            aborter.abort()
+            expect(shapeData).toEqual(
+              new Map([
+                [rowId, { id: rowId, title: `foo1` }],
+                [secondRowId, { id: secondRowId, title: `foo2` }],
+              ])
+            )
+            // expect(batchDoneCount).toEqual(3)
+            resolve()
+          }
+        })
       })
     })
     context.secondRowId = secondRowId
@@ -227,43 +235,47 @@ describe(`HTTP Sync`, () => {
     })
 
     const promise1 = new Promise(async (resolve) => {
-      issueStream1.subscribe((message) => {
-        if (message.headers?.hasOwnProperty(`action`)) {
-          shapeData1.set(message.key, message.value)
-        }
-        if (message.offset === 3) {
-          setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
-        }
+      issueStream1.subscribe((messages) => {
+        messages.forEach(async (message) => {
+          if (message.headers?.hasOwnProperty(`action`)) {
+            shapeData1.set(message.key, message.value)
+          }
+          if (message.offset === 3) {
+            setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
+          }
 
-        if (message.offset === 4) {
-          aborter1.abort()
-          expect(shapeData1).toEqual(
-            new Map([
-              [rowId, { id: rowId, title: `foo3` }],
-              [secondRowId, { id: secondRowId, title: `foo2` }],
-            ])
-          )
-          resolve()
-        }
+          if (message.offset === 4) {
+            aborter1.abort()
+            expect(shapeData1).toEqual(
+              new Map([
+                [rowId, { id: rowId, title: `foo3` }],
+                [secondRowId, { id: secondRowId, title: `foo2` }],
+              ])
+            )
+            resolve()
+          }
+        })
       })
     })
 
     const promise2 = new Promise(async (resolve) => {
-      issueStream2.subscribe((message) => {
-        if (message.headers?.hasOwnProperty(`action`)) {
-          shapeData2.set(message.key, message.value)
-        }
+      issueStream2.subscribe((messages) => {
+        messages.forEach(async (message) => {
+          if (message.headers?.hasOwnProperty(`action`)) {
+            shapeData2.set(message.key, message.value)
+          }
 
-        if (message.offset === 4) {
-          aborter2.abort()
-          expect(shapeData2).toEqual(
-            new Map([
-              [rowId, { id: rowId, title: `foo3` }],
-              [secondRowId, { id: secondRowId, title: `foo2` }],
-            ])
-          )
-          resolve()
-        }
+          if (message.offset === 4) {
+            aborter2.abort()
+            expect(shapeData2).toEqual(
+              new Map([
+                [rowId, { id: rowId, title: `foo3` }],
+                [secondRowId, { id: secondRowId, title: `foo2` }],
+              ])
+            )
+            resolve()
+          }
+        })
       })
     })
 
@@ -280,15 +292,17 @@ describe(`HTTP Sync`, () => {
       signal: aborter.signal,
     })
     await new Promise((resolve) => {
-      issueStream.subscribe((message) => {
-        if (message.offset) {
-          lastOffset = Math.max(lastOffset, message.offset)
-        }
+      issueStream.subscribe((messages) => {
+        messages.forEach(async (message) => {
+          if (message.offset) {
+            lastOffset = Math.max(lastOffset, message.offset)
+          }
 
-        if (message.headers?.[`control`] === `up-to-date`) {
-          aborter.abort()
-          resolve()
-        }
+          if (message.headers?.[`control`] === `up-to-date`) {
+            aborter.abort()
+            resolve()
+          }
+        })
       })
     })
 
@@ -318,14 +332,16 @@ describe(`HTTP Sync`, () => {
       offset: lastOffset,
     })
     await new Promise((resolve) => {
-      newIssueStream.subscribe((message) => {
-        if (message.headers?.hasOwnProperty(`action`)) {
-          catchupOpsCount += 1
-        }
-        if (message.headers?.[`control`] === `up-to-date`) {
-          newAborter.abort()
-          resolve()
-        }
+      newIssueStream.subscribe((messages) => {
+        messages.forEach(async (message) => {
+          if (message.headers?.hasOwnProperty(`action`)) {
+            catchupOpsCount += 1
+          }
+          if (message.headers?.[`control`] === `up-to-date`) {
+            newAborter.abort()
+            resolve()
+          }
+        })
       })
     })
 
@@ -422,21 +438,23 @@ describe(`HTTP Sync`, () => {
     let maxOffset = 0
     let offsetBeforeUpdate = 10000
     await new Promise((resolve) => {
-      issueStream.subscribe(async (message) => {
-        if (typeof message.offset === `number`) {
-          maxOffset = Math.max(maxOffset, message.offset)
-          if (message.offset > offsetBeforeUpdate) {
-            aborter.abort()
-            return resolve()
+      issueStream.subscribe(async (messages) => {
+        messages.forEach(async (message) => {
+          if (typeof message.offset === `number`) {
+            maxOffset = Math.max(maxOffset, message.offset)
+            if (message.offset > offsetBeforeUpdate) {
+              aborter.abort()
+              return resolve()
+            }
           }
-        }
-        if (message.headers?.[`control`] === `up-to-date`) {
-          offsetBeforeUpdate = maxOffset
-          toggleNetworkConnectivity()
-          updateRow({ id: rowId, title: `foo1` })
-          await new Promise((resolve) => setTimeout(resolve, 50))
-          toggleNetworkConnectivity()
-        }
+          if (message.headers?.[`control`] === `up-to-date`) {
+            offsetBeforeUpdate = maxOffset
+            toggleNetworkConnectivity()
+            updateRow({ id: rowId, title: `foo1` })
+            await new Promise((resolve) => setTimeout(resolve, 50))
+            toggleNetworkConnectivity()
+          }
+        })
       })
     })
     context.secondRowId = secondRowId

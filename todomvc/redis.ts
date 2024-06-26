@@ -13,9 +13,10 @@ client.connect().then(() => {
 
   const issueStream = new ShapeStream({
     shape: { table: `todos` },
+    baseUrl: `http://localhost:3000`,
     subscribe: true,
   })
-  issueStream.subscribeBatch(async (messages: Message[]) => {
+  issueStream.subscribe(async (messages: Message[]) => {
     console.log(`messages`, messages)
     // Begin a Redis transaction
     const pipeline = client.multi()
@@ -23,13 +24,11 @@ client.connect().then(() => {
     // Loop through each message and make writes to the Redis hash for action messages
     messages.forEach((message) => {
       // Upsert/delete
-      if (message.headers?.some(({ key }) => key === `action`)) {
-        if (message.headers?.some(({ value }) => value === `delete`)) {
-          pipeline.hDel(`issues`, message.key)
-        } else {
-          const jsonData = JSON.stringify(message.value)
-          pipeline.hSet(`issues`, String(message.key), jsonData)
-        }
+      if (message.headers?.[`action`] === `delete`) {
+        pipeline.hDel(`issues`, message.key)
+      } else if ([`insert`, `update`].includes(message.headers?.[`action`])) {
+        const jsonData = JSON.stringify(message.value)
+        pipeline.hSet(`issues`, String(message.key), jsonData)
       }
     })
 

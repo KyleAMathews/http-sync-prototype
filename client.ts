@@ -9,8 +9,7 @@ interface ShapeStreamOptions {
 }
 
 export class ShapeStream {
-  private subscribers: ((message: Message) => void)[] = []
-  private batchSubscribers: ((messages: Message[]) => void)[] = []
+  private subscribers: ((messages: Message[]) => void)[] = []
   private instanceId: number
   private closedPromise: Promise<unknown>
   private outsideResolve?: (value?: unknown) => void
@@ -66,7 +65,6 @@ export class ShapeStream {
       !this.options.signal?.aborted &&
       (!upToDate || this.options.subscribe)
     ) {
-      pollCount += 1
       const url = new URL(
         `${this.options.baseUrl}/shape/${this.options.shape.table}`
       )
@@ -97,19 +95,23 @@ export class ShapeStream {
 
             return response.json()
           })
-          .then((data: Message[]) => {
-            this.publishBatch(data)
-            data.forEach((message) => {
-              if (typeof message.offset !== `undefined`) {
-                lastOffset = Math.max(lastOffset, message.offset)
-              }
-              if (message.headers?.[`control`] === `up-to-date`) {
-                upToDate = true
-              }
-              if (!this.options.signal?.aborted) {
-                this.publish(message)
-              }
-            })
+          .then((batch: Message[]) => {
+            this.publish(batch)
+
+            // Update upToDate & lastOffset
+            if (batch.length > 0) {
+              const lastMessages = batch.slice(-2)
+              lastMessages.forEach((message) => {
+                if (message.headers?.[`control`] === `up-to-date`) {
+                  upToDate = true
+                }
+                if (typeof message.offset !== `undefined`) {
+                  lastOffset = message.offset
+                }
+              })
+            }
+
+            pollCount += 1
           })
       } catch (e) {
         if (this.options.signal?.aborted) {
@@ -135,22 +137,12 @@ export class ShapeStream {
     this.outsideResolve()
   }
 
-  subscribe(callback: (message: Message) => void) {
+  subscribe(callback: (messages: Message[]) => void) {
     this.subscribers.push(callback)
   }
 
-  publish(message: Message) {
+  publish(messages: Message[]) {
     for (const subscriber of this.subscribers) {
-      subscriber(message)
-    }
-  }
-
-  subscribeBatch(callback: (messages: Message[]) => void) {
-    this.batchSubscribers.push(callback)
-  }
-
-  publishBatch(messages: Message[]) {
-    for (const subscriber of this.batchSubscribers) {
       subscriber(messages)
     }
   }
