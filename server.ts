@@ -184,12 +184,6 @@ const lmdb = open({
 })
 
 export function deleteDb() {
-  // for (const { key, value } of lmdb.getRange({
-  // start: ``,
-  // end: `${MAX_VALUE}`,
-  // })) {
-  // console.log({ value, key })
-  // }
   lmdb.dropSync()
 }
 
@@ -227,34 +221,6 @@ function diffMaps(map1, map2) {
   }
 
   return messages
-}
-
-export async function appendRow({ title }) {
-  console.log(`appending row`, { title })
-  const uuid = uuidv4()
-  try {
-    const result = await client.query(
-      `insert into issues(id, title) values($1, $2)`,
-      [uuid, title]
-    )
-  } catch (e) {
-    console.log(e)
-    throw e
-  }
-
-  return uuid
-}
-
-export async function updateRow({ id, title }) {
-  console.log(`updating row`, { id, title })
-  try {
-    await client.query(`update issues set title = $1 where id = $2`, [
-      title,
-      id,
-    ])
-  } catch (e) {
-    console.log(e)
-  }
 }
 
 let networkDown = false
@@ -295,17 +261,6 @@ export async function createServer({
   })
 
   const port = 3000
-
-  app.post(`/shape/issues/update-row/:id`, (req: Request, res: Response) => {
-    const rowId = parseInt(req.params.id, 10)
-    updateRow(rowId)
-    res.send(`ok`)
-  })
-
-  app.post(`/shape/issues/append-row/`, async (req: Request, res: Response) => {
-    await appendRow({ title: Math.random() })
-    res.send(`ok`)
-  })
 
   // Allow server to add their own routes
   addRoutes(app)

@@ -1,12 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest"
 import { ShapeStream } from "./client"
-import {
-  createServer,
-  deleteDb,
-  updateRow,
-  appendRow,
-  toggleNetworkConnectivity,
-} from "./server"
+import { createServer, deleteDb, toggleNetworkConnectivity } from "./server"
 import { v4 as uuidv4 } from "uuid"
 import { parse } from "cache-control-parser"
 import { schema } from "./test-electric-instance/src/generated/client"
@@ -14,8 +8,33 @@ import pg from "pg"
 const { Client } = pg
 
 let context = {}
-const serverConfig = {
-  url: `http://localhost:5233`,
+
+async function appendRow({ title }) {
+  console.log(`appending row`, { title })
+  const uuid = uuidv4()
+  try {
+    await context.client.query(`insert into issues(id, title) values($1, $2)`, [
+      uuid,
+      title,
+    ])
+  } catch (e) {
+    console.log(e)
+    throw e
+  }
+
+  return uuid
+}
+
+async function updateRow({ id, title }) {
+  console.log(`updating row`, { id, title })
+  try {
+    await context.client.query(`update issues set title = $1 where id = $2`, [
+      title,
+      id,
+    ])
+  } catch (e) {
+    console.log(e)
+  }
 }
 
 beforeAll(async () => {
@@ -43,18 +62,18 @@ beforeAll(async () => {
 
   context.client = client
 
-  // const config = {
-  // url: `http://localhost:5233`,
-  // }
+  const serverConfig = {
+    url: `http://localhost:5233`,
+  }
   context.server = await createServer({ config: serverConfig, schema })
 })
 
 afterAll(async () => {
   console.log(`afterAll`)
-  // TODO need some way to reset server state — or is that necessary?
+  // TODO for port need some way to reset server state — or is that necessary?
   context.server.express.close()
   context.server.electric.disconnect()
-  // TODO remove this.
+  // TODO for port remove this.
   deleteDb()
   await context.client.query(`TRUNCATE TABLE issues`)
   await context.client.query(`TRUNCATE TABLE foo`)
