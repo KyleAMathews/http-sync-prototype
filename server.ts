@@ -331,8 +331,8 @@ export async function createServer({
       res.set(`etag`, etag)
 
       // Check If-None-Match header for ETag validation
-      const ifNoneElse = req.headers[`if-none-else`]
-      if (ifNoneElse === etag.toString()) {
+      const ifNoneMatch = req.headers[`if-none-match`]
+      if (ifNoneMatch === etag.toString()) {
         return res.status(304).end() // Not Modified
       }
 
@@ -361,8 +361,8 @@ export async function createServer({
       res.set(`etag`, etag)
 
       // Check If-None-Match header for ETag validation
-      const ifNoneElse = req.headers[`if-none-else`]
-      if (ifNoneElse === etag.toString()) {
+      const ifNoneMatch = req.headers[`if-none-match`]
+      if (ifNoneMatch === etag.toString()) {
         return res.status(304).end() // Not Modified
       }
 
